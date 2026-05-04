@@ -1,0 +1,30 @@
+project:
+  type: default
+
+engine: julia
+
+freeze: auto
+
+execute:
+  fig-format: png
+  fig-dpi: 150
+  fig-width: 7
+  fig-height: 5
+
+format:
+  html:
+    toc: true
+    code-fold: false
+    theme: cosmo
+    embed-resources: true
+  pdf:
+    pdf-engine: lualatex
+    mainfont: "STIX Two Text"
+    mathfont: "STIX Two Math"
+    monofont: "Fira Code"
+    toc: true
+  gfm:
+    toc: true
+
+julia:
+  project: "."

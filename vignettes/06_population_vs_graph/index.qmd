@@ -1,0 +1,353 @@
+---
+title: "Population-Level vs Graph-Instance Models"
+author: "Simon Frost"
+date: today
+subtitle: "NodeBasedModels.jl Vignette 06"
+format:
+  html:
+    toc: true
+    code-fold: false
+---
+
+## Introduction
+
+NodeBasedModels contains two fundamentally different types of pairwise models:
+
+1. **Population-level pairwise models** work with degree distributions and assume all nodes of a given degree are statistically equivalent. They use the mean-field pairwise framework (formerly distributed as PairwiseNetworkModels.jl, now consolidated here) and generate symbolic ODE systems using ModelingToolkit. These models are compact — the number of variables depends only on the number of compartments, not the population size.
+
+2. **Graph-instance models** work on specific graphs and track the state of every node (individual-based) or every node and edge (pair-based). These models capture the full local structure of the network but require $O(N)$ or $O(N + E)$ variables.
+
+When should you use each? Population-level models are fast and general — they need only a degree distribution, not a specific graph. Graph-instance models are detailed and exact for a given network — they can reveal effects of local structure that population-level models miss.
+
+In this vignette we compare the two approaches and explore when they agree and disagree.
+
+## Setup
+
+```{julia}
+using NodeBasedModels
+using Graphs
+using Plots
+using Statistics
+```
+
+## Population-level pairwise
+
+The population-level pairwise model works with a `NetworkStructure` that encodes the degree distribution. For a $k$-regular network, we use `regular_network(k)`:
+
+```{julia}
+net_pop = regular_network(6)
+println("Type: ", typeof(net_pop))
+println("Mean degree: ", mean_degree(net_pop))
+```
+
+Generate the pairwise system with Bernoulli closure:
+
+```{julia}
+psys = generate_pairwise(sir_model(), net_pop, BernoulliClosure();
+    tspan=(0.0, 100.0))
+```
+
+The system tracks **singles** (node-level probabilities) and **pairs** (edge-level joint probabilities):
+
+```{julia}
+println("Singles: ", keys(psys.singles))
+println("Pairs:   ", keys(psys.pairs))
+n_vars = length(psys.singles) + length(psys.pairs)
+println("Total variables: ", n_vars)
+```
+
+For SIR with 3 compartments (S, I, R), we have $K = 3$ singles and $K(K+1)/2 = 6$ pairs (accounting for symmetry), giving 9 total variables — regardless of population size.
+
+Compute the basic reproduction number and epidemic threshold:
+
+```{julia}
+R0 = basic_reproduction_number(net_pop, BernoulliClosure(), 0.15, 0.1)
+τ_c = epidemic_threshold(net_pop, BernoulliClosure(), 0.1)
+println("R₀ = ", round(R0, digits=3))
+println("Epidemic threshold τ_c = ", round(τ_c, digits=4))
+```
+
+## Graph-instance models
+
+Now we create a specific random regular graph with the same degree and run graph-instance models:
+
+```{julia}
+g = random_regular_graph(200, 6; seed=42)
+net_graph = GraphNetwork(g)
+println("Nodes: ", nv(g), ", Edges: ", ne(g))
+println("Mean degree: ", round(mean_degree(net_graph), digits=2))
+```
+
+### Individual-based (order 1)
+
+The individual-based model tracks $K - 1 = 2$ state probabilities per node (S and I, with R derived):
+
+```{julia}
+ib = generate_individual_based(sir_model(), net_graph;
+    infection_rate=0.15,
+    recovery_rate=0.1,
+    initial_infected=[1],
+    tspan=(0.0, 100.0),
+    saveat=0.5
+)
+n_ib_vars = 2 * nv(g)
+println("Individual-based variables: ", n_ib_vars)
+```
+
+### Pair-based (order 2)
+
+The pair-based model additionally tracks the joint state of every directed edge pair:
+
+```{julia}
+pb = generate_pair_based(sir_model(), net_graph;
+    infection_rate=0.15,
+    recovery_rate=0.1,
+    initial_infected=[1],
+    tspan=(0.0, 100.0),
+    saveat=0.5
+)
+M = ne(g)
+n_pb_vars = 2 * nv(g) + 2 * M
+println("Pair-based variables: ≈", n_pb_vars)
+```
+
+## Scaling comparison
+
+The key trade-off between the two approaches is in the number of state variables:
+
+| Model | Variables | Formula | N=200, k=6 |
+|-------|-----------|---------|-------------|
+| Population pairwise | $K + K(K+1)/2$ | Depends on compartments only | 9 |
+| Individual-based | $(K-1) \times N$ | Linear in nodes | 400 |
+| Pair-based | $(K-1) \times N + 2 \times M$ | Linear in nodes + edges | 1600 |
+| Gillespie | $2 \times N$ (discrete) | Linear in nodes | 400 |
+
+```{julia}
+K = 3  # SIR compartments
+N_vals = [100, 500, 1000, 5000]
+k = 6
+
+pop_vars = K + K * (K + 1) ÷ 2
+println("Population pairwise: $pop_vars variables (constant)")
+println()
+for N in N_vals
+    M_est = N * k ÷ 2
+    ib_v = (K - 1) * N
+    pb_v = (K - 1) * N + 2 * M_est
+    println("N=$N: Individual-based=$ib_v, Pair-based=$pb_v")
+end
+```
+
+The population-level model is $O(K^2)$ — it doesn't grow with $N$ at all. This makes it ideal for exploring parameter space or studying the effect of degree distributions analytically.
+
+## When they agree
+
+On a large random regular graph, all nodes are statistically equivalent — each has the same degree and (in expectation) the same local neighbourhood structure. In this limit, the population-level pairwise model and the graph-instance pair-based model should give similar results after aggregation and normalisation.
+
+```{julia}
+I_ib = aggregate(ib, :I)
+I_pb = aggregate(pb, :I)
+
+plot(ib.sol.t, I_ib ./ nv(g), label="Individual-based (graph)", lw=2, ls=:dash, color=:red,
+     xlabel="Time", ylabel="Infected (normalised)",
+     title="Graph-instance models on regular graph (N=200, k=6)")
+plot!(pb.sol.t, I_pb ./ nv(g), label="Pair-based (graph)", lw=2, color=:blue)
+```
+
+Both graph-instance models produce similar epidemic curves on this regular graph. The pair-based model is slightly more accurate because it captures edge-level correlations, but the qualitative dynamics are the same.
+
+For a truly large random regular graph, the aggregated pair-based result would converge to the population-level pairwise prediction. The small discrepancies we see here are due to:
+
+1. **Finite size effects** ($N = 200$ is relatively small)
+2. **Specific graph realisation** (random graphs have statistical fluctuations)
+3. **Initial conditions** (one specific node vs uniform perturbation)
+
+## When they disagree
+
+Population-level models assume nodes of the same degree are exchangeable. This breaks down when the network has **structural correlations** — degree-degree correlations, community structure, or spatial clustering — that make local neighbourhoods non-equivalent.
+
+A classic example is the **Barabási-Albert** preferential attachment graph, which has a power-law degree distribution and strong degree correlations:
+
+```{julia}
+g_ba = barabasi_albert(200, 3; seed=42)
+net_ba = GraphNetwork(g_ba)
+println("BA graph: N=", nv(g_ba), ", E=", ne(g_ba))
+println("Mean degree: ", round(mean_degree(net_ba), digits=2))
+println("Max degree: ", maximum(degree(g_ba)))
+println("Min degree: ", minimum(degree(g_ba)))
+```
+
+```{julia}
+histogram(degree(g_ba), bins=maximum(degree(g_ba))-minimum(degree(g_ba))+1,
+    xlabel="Degree", ylabel="Count",
+    title="BA degree distribution", label="", color=:steelblue)
+```
+
+Run graph-instance models on the BA graph:
+
+```{julia}
+ib_ba = generate_individual_based(sir_model(), net_ba;
+    infection_rate=0.15,
+    recovery_rate=0.1,
+    initial_infected=[1],
+    tspan=(0.0, 100.0),
+    saveat=0.5
+)
+
+pb_ba = generate_pair_based(sir_model(), net_ba;
+    infection_rate=0.15,
+    recovery_rate=0.1,
+    initial_infected=[1],
+    tspan=(0.0, 100.0),
+    saveat=0.5
+)
+```
+
+```{julia}
+I_ib_ba = aggregate(ib_ba, :I)
+I_pb_ba = aggregate(pb_ba, :I)
+
+plot(ib_ba.sol.t, I_ib_ba ./ nv(g_ba), label="Individual-based", lw=2, ls=:dash, color=:red,
+     xlabel="Time", ylabel="Infected (normalised)",
+     title="Epidemic on Barabási-Albert graph (N=200)")
+plot!(pb_ba.sol.t, I_pb_ba ./ nv(g_ba), label="Pair-based", lw=2, color=:blue)
+```
+
+On the BA graph, the high-degree hubs become infected early and drive rapid initial spread, followed by a slower burn through the low-degree periphery. The graph-instance models capture this heterogeneity directly because they track each node's state individually. A population-level model using only the degree distribution would miss the structural correlations between hubs and their neighbours.
+
+## Clustered closures can leave the realizable region
+
+The previous examples compared different *model levels*. There is a second, more delicate approximation inside the population-level pairwise model itself: the **triple closure**.
+
+For clustered regular networks, `KeelingClosure()` and `BarnardClosure()` try to approximate triples such as $[ASI]$ from singles and pairs. Both are algebraically reasonable, and Barnard's improved closure additionally restores the total triple-mass identity
+
+$$
+\sum_A [ASI] = (n-1)[SI].
+$$
+
+However, neither closure currently comes with a proof that the *full ODE* preserves the physically meaningful region
+
+$$
+[A] \ge 0,\qquad [AB] \ge 0.
+$$
+
+That matters because conservation of total triple mass is weaker than positivity of each inferred triple term.
+
+```{julia}
+clustered_net = regular_network(6; N = 100, ϕ = 0.2)
+clustered_params = Dict(:τ => 0.25, :γ => 0.1)
+
+clustered_cases = [
+    ("Bernoulli", BernoulliClosure()),
+    ("Keeling", KeelingClosure()),
+    ("Barnard", BarnardClosure()),
+]
+
+clustered_results = NamedTuple[]
+
+for (name, closure) in clustered_cases
+    psys = generate_pairwise(sir_model(), clustered_net, closure;
+        N = 100.0, tspan = (0.0, 30.0))
+    sol = solve_pairwise(psys, clustered_params; saveat = 0.5)
+    S = sol[psys.singles[:S]]
+    I = sol[psys.singles[:I]]
+    R = sol[psys.singles[:R]]
+    first_negative = findfirst(x -> x < 0.0, S)
+    push!(clustered_results, (
+        name = name,
+        t = sol.t,
+        S = S,
+        I = I,
+        R = R,
+        minS = minimum(S),
+        finalS = last(S),
+        first_negative_time = isnothing(first_negative) ? nothing : sol.t[first_negative],
+    ))
+end
+
+for row in clustered_results
+    tneg = isnothing(row.first_negative_time) ? "never" : string(round(row.first_negative_time; digits = 2))
+    println("$(row.name): min S = $(round(row.minS; digits = 4)), final S = $(round(row.finalS; digits = 4)), first negative at t = $tneg")
+end
+```
+
+```{julia}
+p = plot(xlabel = "Time", ylabel = "Susceptible population",
+         title = "Clustered population pairwise closures on a 6-regular network")
+for row in clustered_results
+    plot!(p, row.t, row.S, lw = 2, label = row.name)
+end
+hline!(p, [0.0], color = :black, ls = :dot, label = "Zero boundary")
+p
+```
+
+In this regime the Bernoulli closure stays nonnegative, while both clustered closures eventually drive $[S]$ slightly below zero. The solver is still successful — the issue is not a numerical crash — but the approximation has left the **realizable moment cone**.
+
+Why does this happen?
+
+1. **Keeling** multiplies the unclustered pair term by a correlation correction. Pointwise positivity requires that correction to stay nonnegative, but conservation additionally needs a separate normalization property that is not automatic.
+2. **Barnard** fixes the normalization problem, so it conserves total triple mass, but conservation alone does not prove that the ODE points inward on the boundary $[S] = 0$.
+3. In late-stage SIR dynamics the recovered class is no longer negligible, so the simplified conditional-independence assumptions behind the clustered closures are under the most stress.
+
+This is exactly the distinction formalized in the Lean proof artifact: **normalization implies conservation, but only nonnegative weights plus an invariant-region argument can guarantee positivity of the full closed system.**
+
+## $R_0$ analysis
+
+For population-level models, $R_0$ can be computed analytically:
+
+```{julia}
+τ = 0.15
+γ = 0.1
+
+R0_regular = basic_reproduction_number(net_pop, BernoulliClosure(), τ, γ)
+println("R₀ (regular, k=6): ", round(R0_regular, digits=3))
+```
+
+For graph-instance models, we can estimate $R_0$ from the early exponential growth rate of the epidemic. In the initial phase, $I(t) \approx I_0 e^{rt}$ where the growth rate $r$ relates to $R_0$ through $R_0 = 1 + r / \gamma$:
+
+```{julia}
+I_early = aggregate(ib, :I)
+
+# Find the exponential growth phase (I increasing, before peak)
+peak_idx = argmax(I_early)
+growth_phase = 2:min(peak_idx, length(I_early))
+growth_phase = growth_phase[I_early[growth_phase] .> 0.01 * nv(g)]
+
+if length(growth_phase) > 5
+    t_fit = ib.sol.t[growth_phase]
+    log_I = log.(I_early[growth_phase])
+    # Linear regression: log(I) = a + r*t
+    t_mean = mean(t_fit)
+    logI_mean = mean(log_I)
+    r_est = sum((t_fit .- t_mean) .* (log_I .- logI_mean)) / sum((t_fit .- t_mean).^2)
+    R0_est = 1 + r_est / γ
+    println("Estimated growth rate r = ", round(r_est, digits=4))
+    println("Estimated R₀ (graph) = ", round(R0_est, digits=3))
+else
+    println("Insufficient growth phase data for estimation")
+end
+```
+
+The graph-instance estimate may differ from the population-level value due to finite-size effects and the specific graph structure. As $N \to \infty$ on random regular graphs, the two should converge.
+
+## Summary
+
+### Decision table
+
+| Question | Population-level | Graph-instance |
+|----------|-----------------|----------------|
+| Do I have a specific graph? | Not needed | Required |
+| Is the graph large and homogeneous? | Good approximation | Exact but expensive |
+| Does local structure matter? | Misses it | Captures it |
+| Do I need node-level detail? | No — only aggregates | Yes — per-node states |
+| Do I need parameter sweeps? | Fast — 9 ODEs | Slow — hundreds/thousands of ODEs |
+| Heterogeneous degree distribution? | Uses distribution only | Uses full graph |
+| Structural correlations? | Cannot capture | Naturally included |
+
+### Recommended workflow
+
+1. **Explore** with population-level models: sweep parameters, compute $R_0$, identify interesting regimes
+2. **Validate** with graph-instance models: run individual-based and pair-based on specific graphs to check whether population-level predictions hold
+3. **Quantify uncertainty** with Gillespie: run stochastic simulations to assess the impact of stochastic effects (see [Vignette 04](04_stochastic_validation.qmd))
+
+This layered approach uses the cheapest model that answers your question, escalating to more detailed (and expensive) models only when needed.
