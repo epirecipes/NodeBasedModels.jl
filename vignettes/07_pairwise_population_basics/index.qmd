@@ -35,19 +35,22 @@ This vignette shows how `NodeBasedModels.jl` builds these equations programmatic
 
 ```{julia}
 using NodeBasedModels
-using ModelingToolkit
-using OrdinaryDiffEqDefault
 using Plots
 ```
 
 ## Building the system
+
+::: {.callout-note}
+**$R_0=2$ anchor.** For `regular_network(6)` with Bernoulli closure, $R_0=\tau(n-2)/\gamma$. With $\gamma=0.25$, this gives $\tau=2\gamma/(6-2)=0.125$ and 1% initial infection.
+:::
 
 ```{julia}
 model   = sir_model()                 # τ (infection) and γ (recovery)
 network = regular_network(6)          # 6-regular, no clustering (ϕ=0)
 closure = BernoulliClosure()
 psys    = generate_pairwise(model, network, closure;
-                            tspan=(0.0, 200.0), N=1.0)
+                            tspan=(0.0, 200.0), N=1.0,
+                            seed_fraction = 0.01)
 ```
 
 The generator returns a `PairwiseSystem` containing the MTK `ODESystem`, default initial conditions, and parameter symbols.
@@ -57,13 +60,7 @@ println("Singles: ", collect(keys(psys.singles)))
 println("Pairs:   ", collect(keys(psys.pairs)))
 ```
 
-We can inspect the generated equations:
-
-```{julia}
-for eq in equations(psys.system)
-    println(string(eq))
-end
-```
+The generated `PairwiseSystem` stores singles, pairs, default initial conditions, and symbolic parameters for use by `solve_pairwise`.
 
 ## Initial conditions
 
@@ -84,15 +81,14 @@ ic[psys.pairs[(:I,:R)]] = k * I0 * R0
 ic[psys.pairs[(:R,:R)]] = k * R0 * R0
 
 p = copy(psys.params)
-p[:τ] = 0.2
-p[:γ] = 0.1
+p[:γ] = 0.25
+p[:τ] = 2.0 * p[:γ] / (k - 2)
 ```
 
 ## Solving
 
 ```{julia}
-prob = ODEProblem(psys.system, merge(ic, p), psys.tspan)
-sol  = solve(prob; reltol=1e-8, abstol=1e-10)
+sol = solve_pairwise(psys, p; reltol=1e-8, abstol=1e-10)
 nothing
 ```
 
@@ -103,7 +99,7 @@ plot(sol.t,
      [sol[psys.singles[:S]], sol[psys.singles[:I]], sol[psys.singles[:R]]],
      label = ["S" "I" "R"],
      xlabel = "time", ylabel = "fraction",
-     title = "SIR pair-approximation, 6-regular, τ=0.2, γ=0.1",
+     title = "SIR pair-approximation, 6-regular, R₀=2",
      lw = 2)
 ```
 
@@ -123,7 +119,7 @@ println("S(∞) ≈ ", sol[psys.singles[:S]][end])
 println("R(∞) ≈ ", sol[psys.singles[:R]][end])
 ```
 
-For $\tau=0.2$, $\gamma=0.1$, $k=6$, the pair-approximation R₀ is $\tau(n-2)/\gamma = 8$, so we expect a near-complete attack.
+For $\tau=0.125$, $\gamma=0.25$, $k=6$, the pair-approximation R₀ is $\tau(n-2)/\gamma = 2$, matching the cross-scenario anchor.
 
 ## Summary
 

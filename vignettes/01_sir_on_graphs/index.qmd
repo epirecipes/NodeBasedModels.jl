@@ -37,9 +37,20 @@ using Random
 
 We build a random regular graph with $N = 100$ nodes and degree $k = 6$. Every node has exactly 6 neighbours.
 
+::: {.callout-note}
+**$R_0=2$ anchor.** For the homogeneous pairwise anchor, $R_0=\tau(k-2)/\gamma$. With $k=6$ and $\gamma=0.25$, the comparable per-edge/pair rate is $\tau=0.125$, and 1% seeding corresponds to one initial node.
+:::
+
 ```{julia}
 Random.seed!(42)
-g = random_regular_graph(100, 6)
+N = 100
+k = 6
+γ_val = 0.25
+R0_target = 2.0
+τ_val = R0_target * γ_val / (k - 2)
+initial_seed = [1]
+tmax = 80.0
+g = random_regular_graph(N, k)
 net = GraphNetwork(g)
 
 println("Nodes:       ", nv(g))
@@ -61,21 +72,21 @@ Because pairs are factorised ($\langle S_i I_j \rangle \approx \langle S_i \rang
 ```{julia}
 ib_result = generate_individual_based(
     sir_model(), net;
-    infection_rate = 0.15,
-    recovery_rate  = 0.1,
-    initial_infected = [1],
-    tspan  = (0.0, 80.0),
+    infection_rate = τ_val,
+    recovery_rate  = γ_val,
+    initial_infected = initial_seed,
+    tspan  = (0.0, tmax),
     saveat = 0.5
 )
 
 S_ib = aggregate(ib_result, :S)
 I_ib = aggregate(ib_result, :I)
 R_ib = 100.0 .- S_ib .- I_ib
-t_ib = range(0.0, 80.0, length = length(S_ib))
+t_ib = range(0.0, tmax, length = length(S_ib))
 
 p = plot(t_ib, S_ib, label = "S (individual)", lw = 2, color = :blue,
          xlabel = "Time", ylabel = "Number of individuals",
-         title = "SIR on a 6-regular graph (N=100)")
+         title = "SIR on a 6-regular graph (R₀=2, N=100)")
 plot!(p, t_ib, I_ib, label = "I (individual)", lw = 2, color = :red)
 plot!(p, t_ib, R_ib, label = "R (individual)", lw = 2, color = :green)
 p
@@ -94,17 +105,17 @@ This closure is **exact on tree graphs** (no cycles), because in that case nodes
 ```{julia}
 pb_result = generate_pair_based(
     sir_model(), net;
-    infection_rate = 0.15,
-    recovery_rate  = 0.1,
-    initial_infected = [1],
-    tspan  = (0.0, 80.0),
+    infection_rate = τ_val,
+    recovery_rate  = γ_val,
+    initial_infected = initial_seed,
+    tspan  = (0.0, tmax),
     saveat = 0.5
 )
 
 S_pb = aggregate(pb_result, :S)
 I_pb = aggregate(pb_result, :I)
 R_pb = 100.0 .- S_pb .- I_pb
-t_pb = range(0.0, 80.0, length = length(S_pb))
+t_pb = range(0.0, tmax, length = length(S_pb))
 ```
 
 ```{julia}
@@ -124,10 +135,10 @@ gill_avg = gillespie_sir_average(
     net;
     nruns          = 50,
     dt             = 0.5,
-    tmax_grid      = 80.0,
-    infection_rate = 0.15,
-    recovery_rate  = 0.1,
-    initial_infected = [1]
+    tmax_grid      = tmax,
+    infection_rate = τ_val,
+    recovery_rate  = γ_val,
+    initial_infected = initial_seed
 )
 ```
 

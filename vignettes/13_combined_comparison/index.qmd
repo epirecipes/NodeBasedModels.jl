@@ -52,13 +52,18 @@ using Markdown
 package environment, so the summary table is generated directly as
 Markdown.
 
+::: {.callout-note}
+**$R_0=2$ anchor.** This homogeneous $k=3$ SIS benchmark uses the NodeBasedModels pairwise formula $R_0=\tau(k-2)/\gamma$. With $\gamma=0.25$, this gives $\tau=0.5$ and 1% initial infection.
+:::
+
 ```{julia}
 N        = 500
 k        = 3
-β_val    = 0.6
-γ_val    = 0.4
-ε_val    = 0.05
-tmax     = 80.0
+γ_val    = 0.25
+R0_target = 2.0
+β_val    = R0_target * γ_val / (k - 2)  # homogeneous pairwise anchor
+ε_val    = 0.01
+tmax     = 120.0
 ensemble = 48
 save_dt  = 1.0
 

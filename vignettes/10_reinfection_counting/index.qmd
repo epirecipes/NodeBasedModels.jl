@@ -171,12 +171,11 @@ ode_I = [sol_L4[psys_L4.singles[Symbol("I_$p")]][end] for p in 1:4]
 ode_I = vcat(0.0, ode_I)
 sim_S = hist.S ./ n_nodes
 sim_I = hist.I ./ n_nodes
-groupedbar(0:4, hcat(ode_S, sim_S, ode_I, sim_I);
-           label = ["ODE S_p" "SSA S_p" "ODE I_p" "SSA I_p"],
-           xlabel = "infection count p (capped at $4)",
-           ylabel = "population fraction",
-           title  = "Reinfection-count histogram at t = 60",
-           bar_position = :dodge)
+bar(0:4, [ode_S sim_S ode_I sim_I];
+    label = ["ODE S_p" "SSA S_p" "ODE I_p" "SSA I_p"],
+    xlabel = "infection count p (capped at 4)",
+    ylabel = "population fraction",
+    title  = "Reinfection-count histogram at t = 60")
 ```
 
 The ODE distribution and the simulation distribution agree well, including

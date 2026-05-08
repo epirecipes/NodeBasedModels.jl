@@ -19,8 +19,6 @@ This vignette quantifies the effect by sweeping $\phi$ from $0$ to $0.6$.
 
 ```{julia}
 using NodeBasedModels
-using ModelingToolkit
-using OrdinaryDiffEqDefault
 using Plots
 ```
 
@@ -30,21 +28,10 @@ using Plots
 function final_size(ϕ; closure = KeelingClosure(), τ = 0.2, γ = 0.1)
     net = regular_network(6; ϕ = ϕ)
     psys = generate_pairwise(sir_model(), net, closure;
-                             tspan = (0.0, 400.0), N = 1.0)
-    ic = copy(psys.u0)
-    S0, I0 = 0.99, 0.01; k = 6.0
-    ic[psys.singles[:S]] = S0
-    ic[psys.singles[:I]] = I0
-    ic[psys.singles[:R]] = 0.0
-    ic[psys.pairs[(:S,:S)]] = k * S0 * S0
-    ic[psys.pairs[(:S,:I)]] = k * S0 * I0
-    ic[psys.pairs[(:S,:R)]] = 0.0
-    ic[psys.pairs[(:I,:I)]] = k * I0 * I0
-    ic[psys.pairs[(:I,:R)]] = 0.0
-    ic[psys.pairs[(:R,:R)]] = 0.0
+                             tspan = (0.0, 400.0), N = 1.0,
+                             seed_fraction = 0.01)
     p = copy(psys.params); p[:τ] = τ; p[:γ] = γ
-    prob = ODEProblem(psys.system, merge(ic, p), psys.tspan)
-    sol  = solve(prob; reltol = 1e-8, abstol = 1e-10)
+    sol  = solve_pairwise(psys, p; reltol = 1e-8, abstol = 1e-10)
     return sol[psys.singles[:R]][end]
 end
 

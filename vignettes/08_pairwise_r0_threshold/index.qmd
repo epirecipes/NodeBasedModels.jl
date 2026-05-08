@@ -25,8 +25,6 @@ Clustering reduces $R_0$ further; the package implements approximate corrections
 
 ```{julia}
 using NodeBasedModels
-using ModelingToolkit
-using OrdinaryDiffEqDefault
 using Plots
 ```
 
@@ -45,8 +43,6 @@ println("Keeling,   n=6, ϕ=0.4 → R₀ = ", round(R0_k; digits=3))
 ## Symbolic $R_0$
 
 ```{julia}
-using Symbolics
-@parameters τ γ
 R0_sym = basic_reproduction_number(sir_model(), net, BernoulliClosure())
 println("Symbolic R₀ = ", R0_sym)
 ```
@@ -59,19 +55,9 @@ We sweep $\tau$ and record the final epidemic size:
 function final_R(τ_val; γ_val = 0.1, n = 6, T = 400.0)
     net = regular_network(n)
     psys = generate_pairwise(sir_model(), net, BernoulliClosure();
-                             tspan = (0.0, T), N = 1.0)
-    ic = copy(psys.u0)
-    S0, I0 = 0.999, 0.001; k = Float64(n)
-    ic[psys.singles[:S]] = S0; ic[psys.singles[:I]] = I0; ic[psys.singles[:R]] = 0.0
-    ic[psys.pairs[(:S,:S)]] = k * S0 * S0
-    ic[psys.pairs[(:S,:I)]] = k * S0 * I0
-    ic[psys.pairs[(:S,:R)]] = 0.0
-    ic[psys.pairs[(:I,:I)]] = k * I0 * I0
-    ic[psys.pairs[(:I,:R)]] = 0.0
-    ic[psys.pairs[(:R,:R)]] = 0.0
+                             tspan = (0.0, T), N = 1.0, seed_fraction = 0.001)
     p = copy(psys.params); p[:τ] = τ_val; p[:γ] = γ_val
-    prob = ODEProblem(psys.system, merge(ic, p), psys.tspan)
-    sol  = solve(prob; reltol = 1e-8, abstol = 1e-10)
+    sol  = solve_pairwise(psys, p; reltol = 1e-8, abstol = 1e-10)
     return sol[psys.singles[:R]][end]
 end
 
@@ -97,17 +83,10 @@ For supercritical $R_0 > 1$, $[I](t)$ grows exponentially with rate $r = (R_0 - 
 ```{julia}
 net = regular_network(6)
 psys = generate_pairwise(sir_model(), net, BernoulliClosure();
-                          tspan = (0.0, 30.0), N = 1.0)
-ic = copy(psys.u0)
-S0, I0 = 0.999, 0.001; k = 6.0
-ic[psys.singles[:S]] = S0; ic[psys.singles[:I]] = I0; ic[psys.singles[:R]] = 0.0
-ic[psys.pairs[(:S,:S)]] = k*S0*S0; ic[psys.pairs[(:S,:I)]] = k*S0*I0
-ic[psys.pairs[(:S,:R)]] = 0.0
-ic[psys.pairs[(:I,:I)]] = k*I0*I0; ic[psys.pairs[(:I,:R)]] = 0.0
-ic[psys.pairs[(:R,:R)]] = 0.0
+                          tspan = (0.0, 30.0), N = 1.0, seed_fraction = 0.001)
+I0 = 0.001
 p = copy(psys.params); p[:τ] = 0.2; p[:γ] = 0.1
-prob = ODEProblem(psys.system, merge(ic, p), psys.tspan)
-sol  = solve(prob; reltol = 1e-10, abstol = 1e-12)
+sol  = solve_pairwise(psys, p; reltol = 1e-10, abstol = 1e-12)
 
 t_early = sol.t[sol.t .< 8]
 I_early = sol[psys.singles[:I]][1:length(t_early)]

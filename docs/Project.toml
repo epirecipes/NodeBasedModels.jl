@@ -1,0 +1,6 @@
+[deps]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+NodeBasedModels = "2d279cd2-8483-4773-ac2b-bc6b7d472d20"
+
+[compat]
+Documenter = "1"
