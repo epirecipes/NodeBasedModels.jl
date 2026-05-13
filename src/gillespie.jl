@@ -542,6 +542,7 @@ function gillespie_sis_average(net::GraphNetwork;
                                 nruns::Int = 100,
                                 dt::Float64 = 1.0,
                                 tmax_grid::Float64 = 100.0,
+                                seed::Union{Int, Nothing} = nothing,
                                 kwargs...)
     N = nv(net.graph)
     t_grid = collect(0.0:dt:tmax_grid)
@@ -550,7 +551,11 @@ function gillespie_sis_average(net::GraphNetwork;
     I_all = zeros(nruns, nt)
 
     for run in 1:nruns
-        res = gillespie_sis(net; tmax = tmax_grid, kwargs...)
+        # Derive a distinct per-run seed so the ensemble is genuinely an
+        # ensemble. If the caller passes `seed`, use it as a base; otherwise
+        # leave each run's RNG to its own default.
+        run_seed = isnothing(seed) ? nothing : seed + run - 1
+        res = gillespie_sis(net; tmax = tmax_grid, seed = run_seed, kwargs...)
         for (ti, tval) in enumerate(t_grid)
             u = res(min(tval, last(res.times)))
             I_all[run, ti] = count(u)

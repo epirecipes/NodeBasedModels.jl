@@ -49,7 +49,7 @@ but large enough that local correlations dominate, which is precisely the
 regime where standard pairwise fails most visibly.
 
 ```{julia}
-n_nodes  = 2_000
+n_nodes  = 1_000
 k        = 3
 τ, γ     = 0.6, 1.0          # R₀_pairwise = τ(k-1)/γ ≈ 1.2 ⇒ endemic
 tspan    = (0.0, 60.0)

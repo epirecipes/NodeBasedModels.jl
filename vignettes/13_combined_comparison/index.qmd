@@ -25,10 +25,10 @@ by `NodeBasedModels.jl` on one common benchmark:
    3-regular host.
 
 The disease is SIS on a $k = 3$ regular graph with
-$\beta = 0.6$, $\gamma = 0.4$, $N = 500$, initial prevalence
-$\epsilon = 0.05$, and horizon $t_{\max} = 80$.  These are the Phase C
-parameters from vignette 12 and from the package testset
-`"Gillespie comparison (random 3-regular, N=500)"`.
+$\beta = 0.5$, $\gamma = 0.25$, $N = 1000$, initial prevalence
+$\epsilon = 0.01$, and horizon $t_{\max} = 120$.  These derive from the
+canonical SIR parameters ($\gamma = 0.25$, anchored to $R_0 = 2$ via the
+homogeneous pairwise formula $R_0 = \tau(k-2)/\gamma$ for $k = 3$).
 
 For the four ODE approximations below we pass **no explicit
 `reltol`/`abstol`**.  The calls therefore exercise the package defaults:
@@ -57,7 +57,7 @@ Markdown.
 :::
 
 ```{julia}
-N        = 500
+N        = 1_000
 k        = 3
 γ_val    = 0.25
 R0_target = 2.0
@@ -316,7 +316,7 @@ unfinished implementation work.
 
 * Host graph seed: `StableRNG(20240301)`.
 * Gillespie ensemble: 48 runs, seeds `20240302:20240349`.
-* Initial infected set: `collect(1:25)` (5% of `N = 500`).
+* Initial infected set: `collect(1:10)` (1% of `N = 1000`).
 * ODE solver tolerances: package defaults, currently `reltol = 1e-8` and
   `abstol = 1e-10` for `solve_pairwise`, `solve_motif`, and
   `solve_neighbourhood`.
