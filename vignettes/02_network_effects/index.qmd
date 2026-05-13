@@ -71,31 +71,31 @@ p
 We run the pair-based (order-2) model on each graph with the same epidemiological parameters.
 
 ```{julia}
-τ = 0.15
-γ = 0.1
+τ = 0.125
+γ = 0.25
 
 pb_reg = generate_pair_based(sir_model(), net_reg;
     infection_rate = τ, recovery_rate = γ,
-    initial_infected = [1], tspan = (0.0, 80.0), saveat = 0.5)
+    initial_infected = [1], tspan = (0.0, 40.0), saveat = 0.5)
 pb_er  = generate_pair_based(sir_model(), net_er;
     infection_rate = τ, recovery_rate = γ,
-    initial_infected = [1], tspan = (0.0, 80.0), saveat = 0.5)
+    initial_infected = [1], tspan = (0.0, 40.0), saveat = 0.5)
 pb_ba  = generate_pair_based(sir_model(), net_ba;
     infection_rate = τ, recovery_rate = γ,
-    initial_infected = [1], tspan = (0.0, 80.0), saveat = 0.5)
+    initial_infected = [1], tspan = (0.0, 40.0), saveat = 0.5)
 
 I_reg = aggregate(pb_reg, :I)
 I_er  = aggregate(pb_er, :I)
 I_ba  = aggregate(pb_ba, :I)
-t = range(0.0, 80.0, length = length(I_reg))
+t = range(0.0, 40.0, length = length(I_reg))
 ```
 
 ```{julia}
 p = plot(t, I_reg, label = "Regular", lw = 2, color = :blue,
          xlabel = "Time", ylabel = "Number infected",
-         title = "Pair-based SIR: effect of topology (N=200)")
+         title = "Pair-based SIR: effect of topology (N=200, R₀=2 anchor, k=6)")
 plot!(p, t, I_er, label = "Erdős–Rényi", lw = 2, color = :orange)
-plot!(p, range(0.0, 80.0, length = length(I_ba)), I_ba,
+plot!(p, range(0.0, 40.0, length = length(I_ba)), I_ba,
       label = "Barabási–Albert", lw = 2, color = :purple)
 p
 ```

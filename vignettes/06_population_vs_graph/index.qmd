@@ -44,7 +44,7 @@ Generate the pairwise system with Bernoulli closure:
 
 ```{julia}
 psys = generate_pairwise(sir_model(), net_pop, BernoulliClosure();
-    tspan=(0.0, 100.0))
+    tspan=(0.0, 40.0))
 ```
 
 The system tracks **singles** (node-level probabilities) and **pairs** (edge-level joint probabilities):
@@ -84,10 +84,10 @@ The individual-based model tracks $K - 1 = 2$ state probabilities per node (S an
 
 ```{julia}
 ib = generate_individual_based(sir_model(), net_graph;
-    infection_rate=0.15,
-    recovery_rate=0.1,
+    infection_rate=0.125,
+    recovery_rate=0.25,
     initial_infected=[1],
-    tspan=(0.0, 100.0),
+    tspan=(0.0, 40.0),
     saveat=0.5
 )
 n_ib_vars = 2 * nv(g)
@@ -100,10 +100,10 @@ The pair-based model additionally tracks the joint state of every directed edge 
 
 ```{julia}
 pb = generate_pair_based(sir_model(), net_graph;
-    infection_rate=0.15,
-    recovery_rate=0.1,
+    infection_rate=0.125,
+    recovery_rate=0.25,
     initial_infected=[1],
-    tspan=(0.0, 100.0),
+    tspan=(0.0, 40.0),
     saveat=0.5
 )
 M = ne(g)
@@ -187,18 +187,18 @@ Run graph-instance models on the BA graph:
 
 ```{julia}
 ib_ba = generate_individual_based(sir_model(), net_ba;
-    infection_rate=0.15,
-    recovery_rate=0.1,
+    infection_rate=0.125,
+    recovery_rate=0.25,
     initial_infected=[1],
-    tspan=(0.0, 100.0),
+    tspan=(0.0, 40.0),
     saveat=0.5
 )
 
 pb_ba = generate_pair_based(sir_model(), net_ba;
-    infection_rate=0.15,
-    recovery_rate=0.1,
+    infection_rate=0.125,
+    recovery_rate=0.25,
     initial_infected=[1],
-    tspan=(0.0, 100.0),
+    tspan=(0.0, 40.0),
     saveat=0.5
 )
 ```

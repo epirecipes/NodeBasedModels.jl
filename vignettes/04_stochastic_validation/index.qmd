@@ -47,8 +47,8 @@ Run a single Gillespie SIR simulation starting from one infected node:
 
 ```{julia}
 result = gillespie_sir(net;
-    infection_rate=0.15,
-    recovery_rate=0.1,
+    infection_rate=0.125,
+    recovery_rate=0.25,
     initial_infected=[1],
     seed=1
 )
@@ -80,8 +80,8 @@ p = plot(xlabel="Time", ylabel="Infected", title="5 Gillespie runs (seed 1–5)"
 colors = [:red, :orange, :purple, :brown, :magenta]
 for (idx, s) in enumerate(1:5)
     res = gillespie_sir(net;
-        infection_rate=0.15,
-        recovery_rate=0.1,
+        infection_rate=0.125,
+        recovery_rate=0.25,
         initial_infected=[1],
         seed=s
     )
@@ -101,9 +101,9 @@ To characterise the typical behaviour we run many simulations and compute summar
 ens = gillespie_sir_average(net;
     nruns=100,
     dt=0.5,
-    tmax_grid=80.0,
-    infection_rate=0.15,
-    recovery_rate=0.1,
+    tmax_grid=40.0,
+    infection_rate=0.125,
+    recovery_rate=0.25,
     initial_infected=[1]
 )
 ```
@@ -126,18 +126,18 @@ Now we overlay the individual-based (order 1) and pair-based (order 2) determini
 
 ```{julia}
 ib = generate_individual_based(sir_model(), net;
-    infection_rate=0.15,
-    recovery_rate=0.1,
+    infection_rate=0.125,
+    recovery_rate=0.25,
     initial_infected=[1],
-    tspan=(0.0, 80.0),
+    tspan=(0.0, 40.0),
     saveat=0.5,
 )
 
 pb = generate_pair_based(sir_model(), net;
-    infection_rate=0.15,
-    recovery_rate=0.1,
+    infection_rate=0.125,
+    recovery_rate=0.25,
     initial_infected=[1],
-    tspan=(0.0, 80.0),
+    tspan=(0.0, 40.0),
     saveat=0.5,
 )
 ```
@@ -178,9 +178,9 @@ for n_init in [1, 5, 10]
     ens_init = gillespie_sir_average(net;
         nruns=100,
         dt=0.5,
-        tmax_grid=80.0,
-        infection_rate=0.15,
-        recovery_rate=0.1,
+        tmax_grid=40.0,
+        infection_rate=0.125,
+        recovery_rate=0.25,
         initial_infected=init_nodes
     )
     plot!(p, ens_init.t_grid, ens_init.I_mean,

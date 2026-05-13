@@ -49,7 +49,7 @@ k = 6
 R0_target = 2.0
 τ_val = R0_target * γ_val / (k - 2)
 initial_seed = [1]
-tmax = 80.0
+tmax = 40.0
 g = random_regular_graph(N, k)
 net = GraphNetwork(g)
 
