@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Simon Frost">
-<meta name="dcterms.date" content="2026-05-07">
+<meta name="dcterms.date" content="2026-05-12">
 
 <title>Neighbourhood Models and the Ego-Network Closure</title>
 <style>
@@ -2416,7 +2416,7 @@ window.Quarto = {
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">May 7, 2026</p>
+      <p class="date">May 12, 2026</p>
     </div>
   </div>
   
@@ -2458,6 +2458,115 @@ window.Quarto = {
 <span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">Statistics</span></span>
 <span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">StableRNGs</span></span>
 <span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">Printf</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
+<div class="ansi-escaped-output">
+<pre><span class="ansi-green-fg ansi-bold">Precompiling</span> packages...
+   9226.7 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">Static</span>
+  13532.6 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">FiniteDiff → FiniteDiffBandedMatricesExt</span>
+  14954.7 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">DynamicQuantities</span>
+  16959.5 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">RecursiveArrayTools → RecursiveArrayToolsFastBroadcastExt</span>
+   6174.6 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">BitTwiddlingConvenienceFunctions</span>
+   6127.9 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">FastBroadcast → FastBroadcastStaticExt</span>
+   3007.3 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">CPUSummary</span>
+  24629.8 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">StateSelection</span>
+  28150.5 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">SCCNonlinearSolve</span>
+   5453.2 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">DynamicQuantities → DynamicQuantitiesLinearAlgebraExt</span>
+  12257.8 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">StaticArrayInterface</span>
+  23631.1 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">NLsolve</span>
+  35406.0 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">SciMLJacobianOperators</span>
+   9587.1 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">PolyesterWeave</span>
+  12828.0 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">DynamicQuantities → DynamicQuantitiesRecursiveArrayToolsExt</span>
+   8549.4 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">StaticArrayInterface → StaticArrayInterfaceStaticArraysExt</span>
+   5464.2 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">CloseOpenIntervals</span>
+   7530.4 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">StaticArrayInterface → StaticArrayInterfaceOffsetArraysExt</span>
+  38505.4 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">LinearSolve</span>
+   7976.6 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">LayoutPointers</span>
+  25889.7 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">DynamicQuantities → DynamicQuantitiesSciMLBaseExt</span>
+  17365.8 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">StrideArraysCore</span>
+  13523.9 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">Polyester</span>
+  43446.0 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">LineSearch</span>
+  43917.5 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">LinearSolve → LinearSolveBandedMatricesExt</span>
+  45667.2 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">NonlinearSolveBase</span>
+  47983.8 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">LinearSolve → LinearSolveSparseArraysExt</span>
+  12031.6 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">FastBroadcast → FastBroadcastPolyesterExt</span>
+  53651.9 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">LinearSolve → LinearSolveForwardDiffExt</span>
+  80251.2 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">NetworkDynamics</span>
+  42410.4 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">LineSearch → LineSearchLineSearchesExt</span>
+  36826.9 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">NonlinearSolveBase → NonlinearSolveBaseLineSearchExt</span>
+  38481.4 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">NonlinearSolveBase → NonlinearSolveBaseSparseArraysExt</span>
+ 127979.0 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">SymbolicUtils</span>
+  44550.4 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">NonlinearSolveBase → NonlinearSolveBaseSparseMatrixColoringsExt</span>
+  46811.5 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">NonlinearSolveBase → NonlinearSolveBaseBandedMatricesExt</span>
+  46815.2 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">NonlinearSolveBase → NonlinearSolveBaseForwardDiffExt</span>
+  47723.6 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">NonlinearSolveBase → NonlinearSolveBaseLinearSolveExt</span>
+  24320.7 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">RecursiveArrayTools → RecursiveArrayToolsFastBroadcastPolyesterExt</span>
+  35524.9 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">BracketingNonlinearSolve</span>
+  28105.4 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">LinearSolve → LinearSolveEnzymeExt</span>
+  32016.5 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">NonlinearSolveSpectralMethods</span>
+  36521.1 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">SymbolicLimits</span>
+  24728.9 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">NonlinearSolveQuasiNewton</span>
+  33397.5 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">BracketingNonlinearSolve → BracketingNonlinearSolveForwardDiffExt</span>
+  47155.5 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">NonlinearSolveFirstOrder</span>
+  37441.1 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">DiffEqBase</span>
+  39033.7 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">NonlinearSolveSpectralMethods → NonlinearSolveSpectralMethodsForwardDiffExt</span>
+  51509.5 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">NonlinearSolveQuasiNewton → NonlinearSolveQuasiNewtonForwardDiffExt</span>
+  49737.6 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">SimpleNonlinearSolve</span>
+  46162.0 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">DiffEqBase → DiffEqBaseSparseArraysExt</span>
+  48124.4 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">DiffEqBase → DiffEqBaseDynamicQuantitiesExt</span>
+  46630.5 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">DiffEqCallbacks</span>
+  52745.1 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">DiffEqBase → DiffEqBaseForwardDiffExt</span>
+  50318.2 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">OrdinaryDiffEqCore</span>
+ 130029.8 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">Symbolics</span>
+  60337.1 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">JumpProcesses</span>
+  56874.7 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">OrdinaryDiffEqCore → OrdinaryDiffEqCoreSparseArraysExt</span>
+  60473.1 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">OrdinaryDiffEqTsit5</span>
+  74075.6 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">OrdinaryDiffEqVerner</span>
+  34695.6 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">DifferentiationInterface → DifferentiationInterfaceSymbolicsExt</span>
+  35732.4 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">Symbolics → SymbolicsForwardDiffExt</span>
+  93962.1 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">NonlinearSolve</span>
+  38085.8 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">Symbolics → SymbolicsLatexifyExt</span>
+  35138.1 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">JumpProcesses → JumpProcessesOrdinaryDiffEqCoreExt</span>
+  37319.0 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">OrdinaryDiffEqDifferentiation</span>
+  40664.2 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">ImplicitDiscreteSolve</span>
+  37916.2 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">NonlinearSolve → NonlinearSolveNLsolveExt</span>
+  38846.7 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">Symbolics → SymbolicsPreallocationToolsExt</span>
+  33499.5 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">OrdinaryDiffEqDifferentiation → OrdinaryDiffEqDifferentiationSparseArraysExt</span>
+  23053.7 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">OrdinaryDiffEqNonlinearSolve</span>
+  31502.7 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">OrdinaryDiffEqRosenbrock</span>
+  37210.4 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">OrdinaryDiffEqSDIRK</span>
+  44398.6 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">OrdinaryDiffEqBDF</span>
+ 199940.5 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">ModelingToolkitBase</span>
+  88579.1 ms<span class="ansi-green-fg">  ✓ </span>OrdinaryDiffEqDefault
+  85748.0 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">ModelingToolkitBase → MTKLatexifyExt</span>
+  85741.4 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">ModelingToolkitTearing</span>
+  90215.2 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">ModelingToolkitBase → MTKDynamicQuantitiesExt</span>
+  73974.0 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">Catalyst</span>
+ 150418.9 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">ModelingToolkit</span>
+  59525.3 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">ModelingToolkit → MTKOrdinaryDiffEqRosenbrockExt</span>
+  60073.6 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">ModelingToolkit → MTKOrdinaryDiffEqBDFExt</span>
+  63654.3 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">ModelingToolkit → MTKOrdinaryDiffEqDefaultExt</span>
+  92402.9 ms<span class="ansi-green-fg">  ✓ </span>NodeBasedModels
+  85 dependencies successfully precompiled in 1003 seconds. 215 already precompiled.
+<span class="ansi-green-fg ansi-bold">Precompiling</span> packages...
+   1873.1 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">Xorg_xkeyboard_config_jll</span>
+   8078.2 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">FFMPEG</span>
+   6727.3 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">Qt6Base_jll</span>
+   7934.4 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">Qt6ShaderTools_jll</span>
+   8483.2 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">Qt6Svg_jll</span>
+  18901.1 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">GR_jll</span>
+  13017.1 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">Qt6Declarative_jll</span>
+  18587.1 ms<span class="ansi-green-fg">  ✓ </span><span class="ansi-bright-black-fg">GR</span>
+  65818.1 ms<span class="ansi-green-fg">  ✓ </span>Plots
+  9 dependencies successfully precompiled in 173 seconds. 171 already precompiled.
+<span class="ansi-green-fg ansi-bold">Precompiling</span> packages...
+   8907.4 ms<span class="ansi-green-fg">  ✓ </span>QuartoNotebookWorkerJSONExt<span class="ansi-bright-black-fg"> (serial)</span>
+  1 dependency successfully precompiled in 9 seconds
+<span class="ansi-green-fg ansi-bold">Precompiling</span> packages...
+  22103.1 ms<span class="ansi-green-fg">  ✓ </span>QuartoNotebookWorkerPlotsExt<span class="ansi-bright-black-fg"> (serial)</span>
+  1 dependency successfully precompiled in 22 seconds
+</pre>
+</div>
+</div>
 </div>
 </section>
 <section id="the-neighbourhood-framework" class="level2">
