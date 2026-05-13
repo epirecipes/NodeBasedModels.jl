@@ -44,15 +44,19 @@ using Statistics
 
 ## Setting up the test case
 
-We use a 3-regular network of 2,000 nodes — small enough to be tractable
+We use a 3-regular network of 1,000 nodes — small enough to be tractable
 but large enough that local correlations dominate, which is precisely the
-regime where standard pairwise fails most visibly.
+regime where standard pairwise fails most visibly. The disease-process
+parameters use the canonical anchor $\gamma = 0.25$ with $R_0 = 2$ via
+the homogeneous pairwise formula $R_0 = \tau(k-2)/\gamma$ for $k = 3$,
+giving $\tau = 0.5$. Initial prevalence $\varepsilon = 0.01$ matches the
+canonical $S(0) = 990,\, I(0) = 10$ on $N = 1{,}000$.
 
 ```{julia}
 n_nodes  = 1_000
 k        = 3
-τ, γ     = 0.6, 1.0          # R₀_pairwise = τ(k-1)/γ ≈ 1.2 ⇒ endemic
-tspan    = (0.0, 60.0)
+τ, γ     = 0.5, 0.25         # R₀ = τ(k-2)/γ = 2 (canonical anchor)
+tspan    = (0.0, 40.0)
 
 g   = random_regular_graph(n_nodes, k; rng = MersenneTwister(11))
 net = GraphNetwork(g)
@@ -65,7 +69,7 @@ Multiple Gillespie SIS runs give us the mean prevalence trajectory
 together with a 5–95 % envelope.
 
 ```{julia}
-n_initial = 100
+n_initial = 10
 avg = gillespie_sis_average(net;
                               nruns = 60,
                               dt = 0.5,
@@ -148,7 +152,7 @@ A nice feature of the reinfection-counting model is that we have access
 to the full distribution of past infections at every time point, both
 from the closure and from the simulation. Below we plot the lifted
 $S_p$ trajectories for $L = 4$ and overlay the stochastic histogram at
-$t = 60$.
+$t = 40$.
 
 ```{julia}
 S_curves = [sol_L4[psys_L4.singles[Symbol("S_$p")]] for p in 0:4]
@@ -175,7 +179,7 @@ bar(0:4, [ode_S sim_S ode_I sim_I];
     label = ["ODE S_p" "SSA S_p" "ODE I_p" "SSA I_p"],
     xlabel = "infection count p (capped at 4)",
     ylabel = "population fraction",
-    title  = "Reinfection-count histogram at t = 60")
+    title  = "Reinfection-count histogram at t = 40")
 ```
 
 The ODE distribution and the simulation distribution agree well, including
