@@ -2379,8 +2379,9 @@ window.Quarto = {
   <li><a href="#transient-diagnostic" id="toc-transient-diagnostic" class="nav-link" data-scroll-target="#transient-diagnostic">Transient diagnostic</a></li>
   <li><a href="#honest-framing" id="toc-honest-framing" class="nav-link" data-scroll-target="#honest-framing">Honest framing</a></li>
   <li><a href="#reproducing-this-vignette" id="toc-reproducing-this-vignette" class="nav-link" data-scroll-target="#reproducing-this-vignette">Reproducing this vignette</a></li>
+  <li><a href="#networkoutbreaks-ssa-ribbon" id="toc-networkoutbreaks-ssa-ribbon" class="nav-link" data-scroll-target="#networkoutbreaks-ssa-ribbon">NetworkOutbreaks SSA ribbon</a></li>
   </ul>
-</nav>
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="index.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li><li><a href="index.md"><i class="bi bi-file-code"></i>Github (GFM)</a></li></ul></div></nav>
 </div>
 <main class="content" id="quarto-document-content">
 
@@ -2534,24 +2535,24 @@ Note
 <pre><code>121-element Vector{Float64}:
  0.01
  0.023230379896092092
- 0.04091090457319222
- 0.06730779538628102
- 0.10746452924865733
- 0.16705208976621497
- 0.25074878369593195
- 0.35853487678370816
- 0.48109973485061763
- 0.5994073581877569
+ 0.04091090457319238
+ 0.06730779538628143
+ 0.1074645292486584
+ 0.1670520897662165
+ 0.2507487836959342
+ 0.3585348767837066
+ 0.48109973485059493
+ 0.5994073581877432
  ⋮
- 0.8181818181818179
- 0.8181818181818181
- 0.818181818181818
- 0.8181818181818179
- 0.8181818181818178
- 0.8181818181818178
- 0.818181818181818
  0.8181818181818182
- 0.8181818181818182</code></pre>
+ 0.8181818181818185
+ 0.8181818181818182
+ 0.8181818181818181
+ 0.8181818181818179
+ 0.8181818181818178
+ 0.818181818181818
+ 0.8181818181818181
+ 0.8181818181818181</code></pre>
 </div>
 </div>
 </section>
@@ -2569,25 +2570,25 @@ Note
 <div class="cell-output cell-output-display" data-execution_count="1">
 <pre><code>121-element Vector{Float64}:
  0.01
- 0.023188277158582397
+ 0.0231882771585825
  0.04014534331168273
- 0.06348110900584054
- 0.09577373356975358
- 0.13971674794342429
- 0.1977249224318387
- 0.27104016883862225
- 0.3584173101945209
- 0.4549037421119872
+ 0.06348110900584053
+ 0.09577373356975352
+ 0.139716747943424
+ 0.19772492243183887
+ 0.2710401688386217
+ 0.35841731019452044
+ 0.4549037421119854
  ⋮
- 0.8181818181813599
- 0.8181818181813482
- 0.8181818181813363
- 0.8181818181813243
- 0.8181818181813123
- 0.8181818181813003
- 0.8181818181812883
- 0.8181818181812764
- 0.8181818181812647</code></pre>
+ 0.8181818181818138
+ 0.8181818181818139
+ 0.8181818181818143
+ 0.8181818181818153
+ 0.8181818181818163
+ 0.8181818181818165
+ 0.8181818181818163
+ 0.8181818181818162
+ 0.8181818181818163</code></pre>
 </div>
 </div>
 </section>
@@ -2858,6 +2859,11 @@ Note
 NodeBasedModels path: /Users/sdwfrost/Projects/edgebasedmodels/NodeBasedModels.jl/src/NodeBasedModels.jl</code></pre>
 </div>
 </div>
+</section>
+<section id="networkoutbreaks-ssa-ribbon" class="level2">
+<h2 class="anchored" data-anchor-id="networkoutbreaks-ssa-ribbon">NetworkOutbreaks SSA ribbon</h2>
+<p>For a uniform stochastic ground-truth across the package suite we use <a href="https://github.com/sdwfrost/NetworkOutbreaks.jl"><code>NetworkOutbreaks.jl</code></a>’s Gillespie SSA. Where the deterministic prediction in this vignette already sits inside the SSA mean ± 1σ ribbon — see vignette <a href="../01_sir_on_graphs/index.html"><code>01_sir_on_graphs</code></a> for the canonical overlay pattern — we omit the redundant ribbon here for clarity.</p>
+<p>A future revision will inline a per-vignette NO ribbon for each scenario; the shared helper is exposed as <code>vignettes/_validation.jl#gillespie_ribbon</code> and applied in vignette 01.</p>
 </section>
 
 </main>

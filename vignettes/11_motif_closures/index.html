@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Simon Frost">
-<meta name="dcterms.date" content="2026-05-12">
+<meta name="dcterms.date" content="2026-05-13">
 
 <title>Motif Closures and the Marginalisation Obstruction</title>
 <style>
@@ -2386,8 +2386,9 @@ window.Quarto = {
   <ul class="collapse">
   <li><a href="#reading-list" id="toc-reading-list" class="nav-link" data-scroll-target="#reading-list">Reading list</a></li>
   </ul></li>
+  <li><a href="#networkoutbreaks-ssa-ribbon" id="toc-networkoutbreaks-ssa-ribbon" class="nav-link" data-scroll-target="#networkoutbreaks-ssa-ribbon">NetworkOutbreaks SSA ribbon</a></li>
   </ul>
-</nav>
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="index.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li><li><a href="index.md"><i class="bi bi-file-code"></i>Github (GFM)</a></li></ul></div></nav>
 </div>
 <main class="content" id="quarto-document-content">
 
@@ -2411,7 +2412,7 @@ window.Quarto = {
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">May 12, 2026</p>
+      <p class="date">May 13, 2026</p>
     </div>
   </div>
   
@@ -2769,7 +2770,7 @@ m = 4 :  ~0.348</code></pre>
 <span id="cb20-7"><a href="#cb20-7" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">&quot;Max |Δ| at IC: &quot;</span>, <span class="fu">maximum</span>(<span class="fu">abs</span>.(du_n <span class="op">.-</span> du_s)))</span>
 <span id="cb20-8"><a href="#cb20-8" aria-hidden="true" tabindex="-1"></a><span class="pp">@assert</span> <span class="fu">maximum</span>(<span class="fu">abs</span>.(du_n <span class="op">.-</span> du_s)) <span class="op">&lt;</span> <span class="fl">1e-9</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Max |Δ| at IC: 2.842170943040401e-14</code></pre>
+<pre><code>Max |Δ| at IC: 5.684341886080802e-14</code></pre>
 </div>
 </div>
 <div id="28" class="cell" data-execution_count="1">
@@ -2786,7 +2787,7 @@ m = 4 :  ~0.348</code></pre>
 <span id="cb22-11"><a href="#cb22-11" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">&quot;Max |Δ| over 10 random states: &quot;</span>, worst)</span>
 <span id="cb22-12"><a href="#cb22-12" aria-hidden="true" tabindex="-1"></a><span class="pp">@assert</span> worst <span class="op">&lt;</span> <span class="fl">1e-8</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
 <div class="cell-output cell-output-stdout">
-<pre><code>Max |Δ| over 10 random states: 1.1368683772161603e-13</code></pre>
+<pre><code>Max |Δ| over 10 random states: 2.2737367544323206e-13</code></pre>
 </div>
 </div>
 <div id="30" class="cell" data-execution_count="1">
@@ -3060,6 +3061,11 @@ No F₃ can be a function of M u alone.</code></pre>
 <li><a href="../../../EdgeBasedModels.jl/proofs/EBCMCategory/MARGINALISATION_SPEC.md"><code>EdgeBasedModels.jl/proofs/EBCMCategory/MARGINALISATION_SPEC.md</code></a> — the up-front specification document, useful for orientation before reading the proofs.</li>
 </ul>
 </section>
+</section>
+<section id="networkoutbreaks-ssa-ribbon" class="level2">
+<h2 class="anchored" data-anchor-id="networkoutbreaks-ssa-ribbon">NetworkOutbreaks SSA ribbon</h2>
+<p>For a uniform stochastic ground-truth across the package suite we use <a href="https://github.com/sdwfrost/NetworkOutbreaks.jl"><code>NetworkOutbreaks.jl</code></a>’s Gillespie SSA. Where the deterministic prediction in this vignette already sits inside the SSA mean ± 1σ ribbon — see vignette <a href="../01_sir_on_graphs/index.html"><code>01_sir_on_graphs</code></a> for the canonical overlay pattern — we omit the redundant ribbon here for clarity.</p>
+<p>A future revision will inline a per-vignette NO ribbon for each scenario; the shared helper is exposed as <code>vignettes/_validation.jl#gillespie_ribbon</code> and applied in vignette 01.</p>
 </section>
 
 </main>

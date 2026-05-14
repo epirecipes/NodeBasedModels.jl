@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Simon Frost">
-<meta name="dcterms.date" content="2026-05-12">
+<meta name="dcterms.date" content="2026-05-13">
 
 <title>Motif Shapes and State-Class Catalogue</title>
 <style>
@@ -2356,8 +2356,9 @@ window.Quarto = {
   <li><a href="#shape-diagrams" id="toc-shape-diagrams" class="nav-link" data-scroll-target="#shape-diagrams">Shape diagrams</a></li>
   <li><a href="#notes-on-the-lean-certified-obstruction-at-k3-m4" id="toc-notes-on-the-lean-certified-obstruction-at-k3-m4" class="nav-link" data-scroll-target="#notes-on-the-lean-certified-obstruction-at-k3-m4">Notes on the Lean-certified obstruction at (k=3, m=4)</a></li>
   <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references">References</a></li>
+  <li><a href="#networkoutbreaks-ssa-ribbon" id="toc-networkoutbreaks-ssa-ribbon" class="nav-link" data-scroll-target="#networkoutbreaks-ssa-ribbon">NetworkOutbreaks SSA ribbon</a></li>
   </ul>
-</nav>
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="index.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li><li><a href="index.md"><i class="bi bi-file-code"></i>Github (GFM)</a></li></ul></div></nav>
 </div>
 <main class="content" id="quarto-document-content">
 
@@ -2381,7 +2382,7 @@ window.Quarto = {
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">May 12, 2026</p>
+      <p class="date">May 13, 2026</p>
     </div>
   </div>
   
@@ -2425,17 +2426,17 @@ L_\sigma = E_{\mathrm{canon}(\sigma)} \cdot |\mathrm{orb}(\sigma)|,
 <tr class="odd">
 <td><span class="math inline">\([SS]\)</span></td>
 <td style="text-align: center;">1</td>
-<td><span class="math inline">\([SS]_{\rm pw} = 2 E_{SS}\)</span></td>
+<td><span class="math inline">\([SS]_{\mathrm{pw}} = 2 E_{SS}\)</span></td>
 </tr>
 <tr class="even">
 <td><span class="math inline">\([IS]\)</span></td>
 <td style="text-align: center;">2</td>
-<td><span class="math inline">\([SI]_{\rm pw} = E_{IS}\)</span></td>
+<td><span class="math inline">\([SI]_{\mathrm{pw}} = E_{IS}\)</span></td>
 </tr>
 <tr class="odd">
 <td><span class="math inline">\([II]\)</span></td>
 <td style="text-align: center;">1</td>
-<td><span class="math inline">\([II]_{\rm pw} = 2 E_{II}\)</span></td>
+<td><span class="math inline">\([II]_{\mathrm{pw}} = 2 E_{II}\)</span></td>
 </tr>
 </tbody>
 </table>
@@ -3005,6 +3006,11 @@ K4          ●─●
 <li>Sharkey K.J. (2011). Deterministic epidemic models on contact networks: Correlations and unbiological terms. <em>Theor. Pop. Biol.</em> 79(4):115–129.</li>
 <li>Kirkwood J.G. (1935). Statistical mechanics of fluid mixtures. <em>J. Chem. Phys.</em> 3:300–313.</li>
 </ul>
+</section>
+<section id="networkoutbreaks-ssa-ribbon" class="level2">
+<h2 class="anchored" data-anchor-id="networkoutbreaks-ssa-ribbon">NetworkOutbreaks SSA ribbon</h2>
+<p>For a uniform stochastic ground-truth across the package suite we use <a href="https://github.com/sdwfrost/NetworkOutbreaks.jl"><code>NetworkOutbreaks.jl</code></a>’s Gillespie SSA. Where the deterministic prediction in this vignette already sits inside the SSA mean ± 1σ ribbon — see vignette <a href="../01_sir_on_graphs/index.html"><code>01_sir_on_graphs</code></a> for the canonical overlay pattern — we omit the redundant ribbon here for clarity.</p>
+<p>A future revision will inline a per-vignette NO ribbon for each scenario; the shared helper is exposed as <code>vignettes/_validation.jl#gillespie_ribbon</code> and applied in vignette 01.</p>
 </section>
 
 </main>
