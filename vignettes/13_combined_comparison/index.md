@@ -1,6 +1,6 @@
 # Combined comparison: four moment closures vs Gillespie
 Simon Frost
-2026-05-13
+2026-05-14
 
 - [Problem statement](#problem-statement)
 - [Setup](#setup)
@@ -301,9 +301,10 @@ All ODE outputs are saved on the same grid as the Gillespie ensemble.
 function comparison_panel(y, title, color, linestyle)
     p = plot(tgrid, gill_prev;
              ribbon = gill_sd,
-             fillalpha = 0.16,
-             lw = 2.4,
-             color = :black,
+             fillalpha = 0.18,
+             linealpha = 0.5,
+             lw = 1.2,
+             color = color,
              label = "Gillespie mean ± 1σ",
              xlabel = "Time",
              ylabel = "Prevalence I/N",

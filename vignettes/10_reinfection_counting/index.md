@@ -1,6 +1,6 @@
 # Reinfection Counting for SIS on Networks
 Simon Frost
-2026-05-13
+2026-05-14
 
 - [Introduction](#introduction)
 - [Setting up the test case](#setting-up-the-test-case)

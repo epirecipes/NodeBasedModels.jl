@@ -1,6 +1,6 @@
 # SIR on a Network: Pair-Approximation Basics
 Simon Frost
-2026-05-13
+2026-05-14
 
 - [Introduction](#introduction)
 - [Setup](#setup)

@@ -1,6 +1,6 @@
 # Basic Reproduction Number and Epidemic Threshold
 Simon Frost
-2026-05-13
+2026-05-14
 
 - [Introduction](#introduction)
 - [Setup](#setup)

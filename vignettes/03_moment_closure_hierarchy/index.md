@@ -1,6 +1,6 @@
 # The Moment Closure Hierarchy
 Simon Frost
-2026-05-13
+2026-05-14
 
 - [Introduction](#introduction)
   - [Order-1: Individual-based (NIMFA)](#order-1-individual-based-nimfa)
@@ -218,7 +218,7 @@ plot!(p, gill_tree.t_grid, gill_tree.I_mean, label = "Gillespie mean (n=50)",
       lw = 2, color = :black)
 plot!(p, gill_tree.t_grid, gill_tree.I_mean,
       ribbon = (gill_tree.I_mean .- gill_tree.I_q05, gill_tree.I_q95 .- gill_tree.I_mean),
-      fillalpha = 0.2, color = :grey, label = "Gillespie 90% CI")
+      fillalpha = 0.18, linealpha = 0.0, color = :black, label = "Gillespie 90% CI")
 p
 ```
 
@@ -271,7 +271,7 @@ plot!(p, gill_comp.t_grid, gill_comp.I_mean, label = "Gillespie mean (n=50)",
       lw = 2, color = :black)
 plot!(p, gill_comp.t_grid, gill_comp.I_mean,
       ribbon = (gill_comp.I_mean .- gill_comp.I_q05, gill_comp.I_q95 .- gill_comp.I_mean),
-      fillalpha = 0.2, color = :grey, label = "Gillespie 90% CI")
+      fillalpha = 0.18, linealpha = 0.0, color = :black, label = "Gillespie 90% CI")
 p
 ```
 

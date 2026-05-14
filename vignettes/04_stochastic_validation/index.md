@@ -1,6 +1,6 @@
 # Stochastic Validation with Gillespie
 Simon Frost
-2026-05-13
+2026-05-14
 
 - [Introduction](#introduction)
 - [Setup](#setup)
@@ -210,7 +210,7 @@ t_det = range(0.0, 80.0, length=length(I_ib))
 ``` julia
 plot(ens.t_grid, ens.I_mean,
      ribbon=(ens.I_mean .- ens.I_q05, ens.I_q95 .- ens.I_mean),
-     fillalpha=0.2, color=:grey, lw=2, label="Gillespie mean ± 90% CI",
+     fillalpha=0.16, linealpha=0.5, color=:black, lw=1.2, label="Gillespie mean ± 90% CI",
      xlabel="Time", ylabel="Infected",
      title="Deterministic vs Stochastic (N=100, k=6)")
 plot!(t_det, I_ib, label="Individual-based (order 1)", lw=2, ls=:dash, color=:red)
