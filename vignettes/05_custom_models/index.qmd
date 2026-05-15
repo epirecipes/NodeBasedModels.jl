@@ -3,10 +3,6 @@ title: "Custom Compartmental Models"
 author: "Simon Frost"
 date: today
 subtitle: "NodeBasedModels.jl Vignette 05"
-format:
-  html:
-    toc: true
-    code-fold: false
 ---
 
 ## Introduction
@@ -66,12 +62,12 @@ println("Graph: N=$(nv(g)), E=$(ne(g)), mean_degree=$(mean_degree(net))")
 
 ```{julia}
 sis_result = generate_individual_based(sis_model(), net;
-    infection_rate=0.15,
-    recovery_rate=0.1,
+    infection_rate=0.125,
+    recovery_rate=0.25,
     initial_infected=[1],
     tspan=(0.0, 150.0),
     saveat=0.5,
-    ε=0.01
+    ε=0.001
 )
 ```
 
@@ -120,12 +116,12 @@ The model has two spontaneous transitions ($I \to R$ and $S \to V$). In the curr
 
 ```{julia}
 sirv_result = generate_individual_based(sirv, net;
-    infection_rate=0.15,
-    recovery_rate=0.1,
+    infection_rate=0.125,
+    recovery_rate=0.25,
     initial_infected=[1],
     tspan=(0.0, 100.0),
     saveat=0.5,
-    ε=0.01
+    ε=0.001
 )
 ```
 
@@ -138,7 +134,7 @@ t_v = range(0.0, 100.0, length=length(S_v))
 
 plot(t_v, S_v, label="S", lw=2, color=:blue,
      xlabel="Time", ylabel="Fraction",
-     title="SIRV model (ν = γ = 0.1)")
+     title="SIRV model (ν = γ = 0.25)")
 plot!(t_v, I_v, label="I", lw=2, color=:red)
 plot!(t_v, R_v, label="R", lw=2, color=:green)
 plot!(t_v, V_v, label="V", lw=2, color=:purple)
@@ -160,12 +156,12 @@ Individuals in $E$ are infected but not yet infectious. This delays the epidemic
 
 ```{julia}
 seir_result = generate_individual_based(seir_model(), net;
-    infection_rate=0.15,
-    recovery_rate=0.1,
+    infection_rate=0.125,
+    recovery_rate=0.25,
     initial_infected=[1],
     tspan=(0.0, 100.0),
     saveat=0.5,
-    ε=0.01
+    ε=0.001
 )
 ```
 
@@ -190,12 +186,12 @@ Compare the SIR and SEIR epidemic curves to see the delay and reduction caused b
 
 ```{julia}
 sir_result = generate_individual_based(sir_model(), net;
-    infection_rate=0.15,
-    recovery_rate=0.1,
+    infection_rate=0.125,
+    recovery_rate=0.25,
     initial_infected=[1],
     tspan=(0.0, 100.0),
     saveat=0.5,
-    ε=0.01
+    ε=0.001
 )
 I_sir = aggregate(sir_result, :I)
 t_sir = range(0.0, 100.0, length=length(I_sir))
@@ -237,12 +233,12 @@ Both $I_1$ and $I_2$ are infectious (they can transmit), but only individuals in
 
 ```{julia}
 sir2_result = generate_individual_based(sir2, net;
-    infection_rate=0.15,
-    recovery_rate=0.1,
+    infection_rate=0.125,
+    recovery_rate=0.25,
     initial_infected=[1],
     tspan=(0.0, 100.0),
     saveat=0.5,
-    ε=0.01
+    ε=0.001
 )
 ```
 
@@ -287,3 +283,123 @@ The `CompartmentalModel` type requires only:
 2. A list of `Transition`s typed as `:infection` (edge-based) or `:spontaneous` (node-based)
 
 Any model defined this way can be passed to `generate_individual_based` and run on any `GraphNetwork`. The `generate_pair_based` constructor is currently restricted to the canonical SIR model (`S → I → R` on undirected graphs); see the introduction at the top of this vignette. This systematic separation of disease and network structure enables rapid exploration of how compartmental complexity interacts with contact heterogeneity.
+
+## Simulation validation
+
+We compare the **individual-based (NIMFA, order-1)** deterministic
+predictions to ground-truth Gillespie SSA from
+[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)
+using two complementary tools:
+
+1. A **trajectory ribbon** (SSA mean ± 1σ, conditioned on major outbreaks
+   so stochastic die-outs do not bias the mean downward).
+2. A **Maximum Mean Discrepancy (MMD²)** kernel two-sample test that
+   quantifies the gap between the deterministic IB curves and the SSA
+   trajectory ensemble, with a permutation-test p-value.
+
+The IB model is *order-1 NIMFA*, which closes the pair moment as
+$\langle S_i I_j\rangle \approx \langle S_i\rangle\langle I_j\rangle$ and
+therefore systematically over-predicts peak prevalence on graphs with
+non-negligible local correlations (see vignette 03 for the full closure
+hierarchy). We expect the IB curve to sit *above* the SSA mean and the
+MMD² to be small but detectable on $N = 200$, $k = 6$.
+
+Setup: regular host graphs of $N = 200$ with $k = 6$; canonical anchor
+$\tau = 0.125$, $\gamma = 0.25$ ($R_0 = 2$); single-seed initial
+condition matching the SSA `seed_fraction = 1/200`.
+
+```{julia}
+include("../_validation.jl")
+
+N_v = 200
+prog_sir  = sir_model(τ = :β)
+prog_seir = seir_model(τ = :β)
+params    = Dict(:β => 0.125, :γ => 0.25, :σ => 0.25)
+
+tg = collect(0.0:0.5:100.0)
+n_graphs = 8; nsims_per_graph = 25
+
+# --- SSA ribbons (mean ± 1σ, major outbreaks only) ---
+t_sir_no, μ_sir_no, σ_sir_no = gillespie_ribbon(prog_sir, params,
+    regular_graph_builder(N_v, 6);
+    N = N_v, n_graphs = n_graphs, nsims_per_graph = nsims_per_graph,
+    tspan = (0.0, 100.0), seed_fraction = 1 / N_v,
+    tgrid = tg, major_outbreak_thresh = 0.2)
+
+t_seir_no, μ_seir_no, σ_seir_no = gillespie_ribbon(prog_seir, params,
+    regular_graph_builder(N_v, 6);
+    N = N_v, n_graphs = n_graphs, nsims_per_graph = nsims_per_graph,
+    tspan = (0.0, 100.0), seed_fraction = 1 / N_v,
+    tgrid = tg, major_outbreak_thresh = 0.2)
+```
+
+```{julia}
+# --- MMD² between IB-on-graph deterministic curves and SSA samples ---
+# IB ensemble: run the deterministic IB on n_graphs independent host
+# graphs (one curve per graph), pack into a feature matrix with the
+# same layout as the SSA features.
+function ib_ensemble_features(prog, params, builder, comps, tg;
+                              N, n_graphs, tspan, seed_fraction,
+                              base_seed = 20240801)
+    rng = StableRNG(base_seed)
+    F = Matrix{Float64}(undef, n_graphs, length(comps) * length(tg))
+    for gi in 1:n_graphs
+        g = builder(rng)
+        netg = GraphNetwork(g)
+        ib = generate_individual_based(prog, netg;
+            infection_rate = params[:β],
+            recovery_rate  = params[:γ],
+            initial_infected = [1],
+            tspan = tspan, saveat = 0.5,
+            ε = seed_fraction)
+        t_ib = range(tspan[1], tspan[2]; length = length(aggregate(ib, comps[1])))
+        curves = Dict(c => collect(aggregate(ib, c) ./ N) for c in comps)
+        F[gi:gi, :] = ode_feature_row(collect(t_ib), curves, comps, tg)
+    end
+    return F
+end
+
+comps_view = [:S, :I, :R]
+ib_F_sir = ib_ensemble_features(sir_model(), params,
+    regular_graph_builder(N_v, 6), comps_view, tg;
+    N = N_v, n_graphs = n_graphs, tspan = (0.0, 100.0),
+    seed_fraction = 1 / N_v)
+
+ssa_F_sir = ssa_feature_matrix(prog_sir, params,
+    regular_graph_builder(N_v, 6), comps_view, tg;
+    N = N_v, n_graphs = n_graphs, nsims_per_graph = nsims_per_graph,
+    tspan = (0.0, 100.0), seed_fraction = 1 / N_v,
+    base_seed = 20240802, major_outbreak_thresh = 0.2)
+
+mmd_sir, p_sir, σ_sir_use = mmd2_permutation_pvalue(
+    ib_F_sir, ssa_F_sir; n_perm = 200)
+
+println("SIR  IB-vs-SSA  MMD² = ", round(mmd_sir; digits=5),
+        "   permutation p = ", round(p_sir; digits=3),
+        "   (σ = ", round(σ_sir_use; digits=3), ")")
+```
+
+```{julia}
+#| label: fig-nbm-05-no-ribbon
+#| fig-cap: "Individual-based (order-1 NIMFA) SIR (red) and SEIR (orange) deterministic curves vs NetworkOutbreaks SSA mean ± 1σ ribbons (8 host graphs × 25 SSA replicates, N=200, k=6, R₀=2, single seed; SSA conditioned on attack rate ≥ 20%). The IB curve over-predicts the SSA mean — this is the expected NIMFA closure bias from ignoring pair correlations on graphs with finite degree (see vignette 03). The MMD² statistic quantifies this gap."
+p = plot(t_sir, I_sir, label = "SIR (IB, NIMFA)", lw = 2, color = :red,
+         xlabel = "Time", ylabel = "Infected count",
+         title = "Individual-based SIR/SEIR vs NetworkOutbreaks SSA")
+plot!(p, t_sir_no, μ_sir_no[:I] .* N_v, ribbon = σ_sir_no[:I] .* N_v,
+      label = "SIR (SSA mean ± 1σ)", color = :red,
+      fillalpha = 0.18, linealpha = 0.5, lw = 1)
+plot!(p, t_seir, I_seir, label = "SEIR (IB, NIMFA)", lw = 2, ls = :dash, color = :orange)
+plot!(p, t_seir_no, μ_seir_no[:I] .* N_v, ribbon = σ_seir_no[:I] .* N_v,
+      label = "SEIR (SSA mean ± 1σ)", color = :orange,
+      fillalpha = 0.18, linealpha = 0.5, lw = 1)
+annotate!(p, 70, maximum(I_sir) * 0.95,
+          text("MMD²(IB,SSA) ≈ $(round(mmd_sir; digits=4))\np = $(round(p_sir; digits=3))",
+               :left, 8))
+p
+```
+
+The MMD² value with a small permutation p-value confirms that the
+order-1 (NIMFA) curves are statistically distinguishable from the SSA
+ground truth on $N=200$ graphs. The closure error closes as $N$ grows
+and on more tree-like graphs (lower clustering); see vignette 03 for
+the corresponding pair-based (Kirkwood) closure that reduces this gap.

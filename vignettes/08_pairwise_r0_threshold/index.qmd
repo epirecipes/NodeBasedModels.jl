@@ -3,10 +3,6 @@ title: "Basic Reproduction Number and Epidemic Threshold"
 author: "Simon Frost"
 date: today
 subtitle: "NodeBasedModels.jl Vignette 08 (pairwise R₀ and threshold)"
-format:
-  html:
-    toc: true
-    code-fold: false
 ---
 
 ## Introduction
@@ -32,11 +28,11 @@ using Plots
 
 ```{julia}
 net = regular_network(6)
-R0_b = basic_reproduction_number(net, BernoulliClosure(), 0.2, 0.1)
-println("Bernoulli, n=6, τ=0.2, γ=0.1 → R₀ = ", R0_b)
+R0_b = basic_reproduction_number(net, BernoulliClosure(), 0.125, 0.25)
+println("Bernoulli, n=6, τ=0.125, γ=0.25 → R₀ = ", R0_b)
 
 net_cl = regular_network(6; ϕ = 0.4)
-R0_k = basic_reproduction_number(net_cl, KeelingClosure(), 0.2, 0.1)
+R0_k = basic_reproduction_number(net_cl, KeelingClosure(), 0.125, 0.25)
 println("Keeling,   n=6, ϕ=0.4 → R₀ = ", round(R0_k; digits=3))
 ```
 
@@ -52,7 +48,7 @@ println("Symbolic R₀ = ", R0_sym)
 We sweep $\tau$ and record the final epidemic size:
 
 ```{julia}
-function final_R(τ_val; γ_val = 0.1, n = 6, T = 400.0)
+function final_R(τ_val; γ_val = 0.25, n = 6, T = 400.0)
     net = regular_network(n)
     psys = generate_pairwise(sir_model(), net, BernoulliClosure();
                              tspan = (0.0, T), N = 1.0, seed_fraction = 0.001)
@@ -61,9 +57,9 @@ function final_R(τ_val; γ_val = 0.1, n = 6, T = 400.0)
     return sol[psys.singles[:R]][end]
 end
 
-τgrid = range(0.01, 0.5; length=40)
+τgrid = range(0.01, 0.25; length=40)
 R∞    = [final_R(τ) for τ in τgrid]
-R0    = [τ * 4 / 0.1 for τ in τgrid]   # n=6 → n-2 = 4
+R0    = [τ * 4 / 0.25 for τ in τgrid]   # n=6 → n-2 = 4, γ = 0.25
 nothing
 ```
 
@@ -83,21 +79,62 @@ For supercritical $R_0 > 1$, $[I](t)$ grows exponentially with rate $r = (R_0 - 
 ```{julia}
 net = regular_network(6)
 psys = generate_pairwise(sir_model(), net, BernoulliClosure();
-                          tspan = (0.0, 30.0), N = 1.0, seed_fraction = 0.001)
+                          tspan = (0.0, 60.0), N = 1.0, seed_fraction = 0.001)
 I0 = 0.001
-p = copy(psys.params); p[:τ] = 0.2; p[:γ] = 0.1
+p = copy(psys.params); p[:τ] = 0.125; p[:γ] = 0.25
 sol  = solve_pairwise(psys, p; reltol = 1e-10, abstol = 1e-12)
 
-t_early = sol.t[sol.t .< 8]
+t_early = sol.t[sol.t .< 25]
 I_early = sol[psys.singles[:I]][1:length(t_early)]
 
 plot(t_early, I_early, yscale = :log10, lw = 2, label = "[I](t)")
-plot!(t_early, I0 .* exp.((8.0 - 1.0) * 0.1 .* t_early),
+plot!(t_early, I0 .* exp.((2.0 - 1.0) * 0.25 .* t_early),
       lw = 2, ls = :dash, label = "exp((R₀-1)γt)")
 xlabel!("time"); ylabel!("[I]")
-title!("Early exponential growth")
+title!("Early exponential growth (canonical R₀ = 2)")
 ```
 
 ## Summary
 
 `basic_reproduction_number` returns numeric or symbolic $R_0$ for any model–network–closure triple; the threshold $R_0 = 1$ separates die-out from outbreak in the pair system.
+
+## Simulation validation
+
+We overlay the
+[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)
+Gillespie SSA on the early-growth trajectory at the canonical anchor
+($\tau = 0.125$, $\gamma = 0.25$, $R_0 = \tau(k-2)/\gamma = 2$ on a
+6-regular host graph). At small times the SSA-mean prevalence grows
+exponentially with the same rate $(R_0 - 1)\gamma = 0.25$ predicted by
+the pair-approximation.
+
+```{julia}
+include("../_validation.jl")
+
+N_v = 1000
+prog_no = sir_model(τ = :β)
+params_no = Dict(:β => 0.125, :γ => 0.25)
+
+t_no, μ_no, σ_no = gillespie_ribbon(prog_no, params_no,
+    regular_graph_builder(N_v, 6);
+    N = N_v, n_graphs = 5, nsims_per_graph = 25,
+    tspan = (0.0, 60.0), seed_fraction = 0.001,
+    tgrid = collect(0.0:0.5:60.0),
+    major_outbreak_thresh = 0.05)
+```
+
+```{julia}
+#| label: fig-nbm-08-no-ribbon
+#| fig-cap: "Pair-approximation [I](t) (line) vs NetworkOutbreaks SSA mean ± 1σ (5 host graphs × 25 SSA replicates, N=1000, k=6, ε=0.001) at the canonical anchor R₀ = 2. Both grow exponentially at early times with rate (R₀-1)γ = 0.25."
+keep = t_no .<= 25
+p = plot(t_early, I_early, yscale = :log10, lw = 2, color = :red, label = "[I](t) (PA)")
+plot!(p, t_early, I0 .* exp.((2.0 - 1.0) * 0.25 .* t_early),
+      lw = 2, ls = :dash, color = :black, label = "exp((R₀-1)γt)")
+plot!(p, t_no[keep], μ_no[:I][keep],
+      ribbon = σ_no[:I][keep], yscale = :log10,
+      label = "I (SSA mean ± 1σ)", color = :darkred,
+      fillalpha = 0.18, linealpha = 0.5, lw = 1)
+xlabel!(p, "time"); ylabel!(p, "[I]")
+title!(p, "Early growth: pair-approximation vs SSA (R₀ = 2)")
+p
+```

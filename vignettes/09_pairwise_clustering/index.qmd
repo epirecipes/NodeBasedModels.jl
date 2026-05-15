@@ -3,10 +3,6 @@ title: "Clustering Effects on Epidemic Dynamics"
 author: "Simon Frost"
 date: today
 subtitle: "NodeBasedModels.jl Vignette 09 (clustering effects)"
-format:
-  html:
-    toc: true
-    code-fold: false
 ---
 
 ## Introduction
@@ -35,7 +31,7 @@ function final_size(ϕ; closure = KeelingClosure(), τ = τ_anchor, γ = γ_anch
     net = regular_network(n_degree; ϕ = ϕ)
     psys = generate_pairwise(sir_model(), net, closure;
                              tspan = (0.0, 400.0), N = 1.0,
-                             seed_fraction = 0.01)
+                             seed_fraction = 0.001)
     p = copy(psys.params); p[:τ] = τ; p[:γ] = γ
     sol  = solve_pairwise(psys, p; reltol = 1e-8, abstol = 1e-10)
     return sol[psys.singles[:R]][end]
@@ -72,3 +68,46 @@ title!("Closure choice matters when ϕ > 0")
 ## Summary
 
 Triangle density modifies both the *speed* and the *final size* of an outbreak. Use Keeling, Barnard, or Eames closures whenever the network has $\phi > 0.1$ or so; reserve Bernoulli for the unclustered limit.
+
+## Simulation validation
+
+We overlay the
+[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)
+Gillespie SSA on the unclustered ($\phi = 0$) baseline trajectory, where
+the host graph is a 6-regular configuration model. SSA validation of the
+clustering-corrected closures (Keeling/Barnard) requires a graph builder
+that explicitly preserves $\phi$; that is deferred to a future revision
+of the shared validation helpers (see `vignettes/_validation.jl`).
+
+```{julia}
+include("../_validation.jl")
+
+N_v = 1000
+prog_no = sir_model(τ = :β)
+params_no = Dict(:β => τ_anchor, :γ => γ_anchor)
+
+t_no, μ_no, σ_no = gillespie_ribbon(prog_no, params_no,
+    regular_graph_builder(N_v, n_degree);
+    N = N_v, n_graphs = 5, nsims_per_graph = 25,
+    tspan = (0.0, 200.0), seed_fraction = 0.001, major_outbreak_thresh = 0.2,
+    tgrid = collect(0.0:1.0:200.0))
+```
+
+```{julia}
+#| label: fig-nbm-09-no-ribbon
+#| fig-cap: "Pair-approximation [I](t) at the unclustered (ϕ=0) baseline (line) vs NetworkOutbreaks SSA mean ± 1σ ribbon (5 host graphs × 25 SSA replicates, N=1000, k=6, ε=0.001)."
+psys_un  = generate_pairwise(sir_model(), regular_network(n_degree, ϕ = 0.0),
+                              BernoulliClosure();
+                              tspan = (0.0, 200.0), N = 1.0, seed_fraction = 0.001)
+p_un     = copy(psys_un.params); p_un[:τ] = τ_anchor; p_un[:γ] = γ_anchor
+sol_un   = solve_pairwise(psys_un, p_un; reltol = 1e-8, abstol = 1e-10)
+
+p = plot(sol_un.t, sol_un[psys_un.singles[:I]],
+         label = "[I] (PA, ϕ=0)", lw = 2, color = :red,
+         xlabel = "time", ylabel = "fraction infected",
+         title = "Pair-approximation vs NetworkOutbreaks SSA (unclustered)")
+plot!(p, t_no, μ_no[:I], ribbon = σ_no[:I],
+      label = "I (SSA mean ± 1σ)", color = :darkred,
+      fillalpha = 0.18, linealpha = 0.5, lw = 1)
+p
+```

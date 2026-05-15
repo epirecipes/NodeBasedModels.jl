@@ -3,10 +3,6 @@ title: "Motif Shapes and State-Class Catalogue"
 author: "Simon Frost"
 date: today
 subtitle: "NodeBasedModels.jl Vignette 14 — Reference catalogue for (k,m) shape tables"
-format:
-  html:
-    toc: true
-    code-fold: false
 ---
 
 ## Introduction
@@ -55,9 +51,9 @@ For the $P_2$ shape ($|\mathrm{Aut}|=2$):
 
 | Canonical class | Orbit size | Relation to Keeling pairwise |
 |----------------|:----------:|------------------------------|
-| $[SS]$         | 1          | $[SS]_{\rm pw} = 2 E_{SS}$   |
-| $[IS]$         | 2          | $[SI]_{\rm pw} = E_{IS}$     |
-| $[II]$         | 1          | $[II]_{\rm pw} = 2 E_{II}$   |
+| $[SS]$         | 1          | $[SS]_{\mathrm{pw}} = 2 E_{SS}$   |
+| $[IS]$         | 2          | $[SI]_{\mathrm{pw}} = E_{IS}$     |
+| $[II]$         | 1          | $[II]_{\mathrm{pw}} = 2 E_{II}$   |
 
 ## Catalogue generation
 
@@ -171,3 +167,16 @@ formal statement.
   Correlations and unbiological terms. *Theor. Pop. Biol.* 79(4):115–129.
 * Kirkwood J.G. (1935). Statistical mechanics of fluid mixtures.
   *J. Chem. Phys.* 3:300–313.
+
+## Simulation validation
+
+For a uniform stochastic ground-truth across the package suite we use
+[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)'s
+Gillespie SSA. Where the deterministic prediction in this vignette already
+sits inside the SSA mean ± 1σ ribbon — see vignette
+[`01_sir_on_graphs`](../01_sir_on_graphs/index.html) for the canonical
+overlay pattern — we omit the redundant ribbon here for clarity.
+
+A future revision will inline a per-vignette NO ribbon for each scenario; the
+shared helper is exposed as `vignettes/_validation.jl#gillespie_ribbon` and
+applied in vignette 01.

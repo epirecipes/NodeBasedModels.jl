@@ -3,10 +3,6 @@ title: "SIR Epidemic on a Graph"
 author: "Simon Frost"
 date: today
 subtitle: "NodeBasedModels.jl Vignette 01"
-format:
-  html:
-    toc: true
-    code-fold: false
 ---
 
 ## Introduction
@@ -35,7 +31,7 @@ using Random
 
 ## Create a graph
 
-We build a random regular graph with $N = 100$ nodes and degree $k = 6$. Every node has exactly 6 neighbours.
+We build a random regular graph with $N = 100$ nodes and degree $k = 6$. Every node has exactly 6 neighbours. *(This vignette is an exception to the canonical $\varepsilon = 0.001$ convention: per-node ODE/SSA size makes $N = 1000$ intractable, so we keep $N = 100$ with a single seed, which is $\varepsilon = 0.01$.)*
 
 ::: {.callout-note}
 **$R_0=2$ anchor.** For the homogeneous pairwise anchor, $R_0=\tau(k-2)/\gamma$. With $k=6$ and $\gamma=0.25$, the comparable per-edge/pair rate is $\tau=0.125$, and 1% seeding corresponds to one initial node.
@@ -81,7 +77,7 @@ ib_result = generate_individual_based(
 
 S_ib = aggregate(ib_result, :S)
 I_ib = aggregate(ib_result, :I)
-R_ib = 100.0 .- S_ib .- I_ib
+R_ib = N .- S_ib .- I_ib
 t_ib = range(0.0, tmax, length = length(S_ib))
 
 p = plot(t_ib, S_ib, label = "S (individual)", lw = 2, color = :blue,
@@ -114,7 +110,7 @@ pb_result = generate_pair_based(
 
 S_pb = aggregate(pb_result, :S)
 I_pb = aggregate(pb_result, :I)
-R_pb = 100.0 .- S_pb .- I_pb
+R_pb = N .- S_pb .- I_pb
 t_pb = range(0.0, tmax, length = length(S_pb))
 ```
 
@@ -151,7 +147,7 @@ plot!(p, gill_avg.t_grid, gill_avg.I_mean, label = "Gillespie mean (n=50)",
       lw = 2, color = :black)
 plot!(p, gill_avg.t_grid, gill_avg.I_mean,
       ribbon = (gill_avg.I_mean .- gill_avg.I_q05, gill_avg.I_q95 .- gill_avg.I_mean),
-      fillalpha = 0.2, color = :grey, label = "Gillespie 90% CI")
+      fillalpha = 0.18, linealpha = 0.0, color = :black, label = "Gillespie 90% CI")
 p
 ```
 
@@ -164,6 +160,42 @@ $$
 The individual-based model over-estimates the epidemic because the pairwise independence assumption ignores **dynamical correlations**: if node $i$ infected node $j$, then $j$ is less likely to re-infect $i$ because $i$ is probably still infected. This "2-cycle" effect is captured by the pair-based model.
 
 ## Discussion
+
+### NetworkOutbreaks ribbon
+
+To standardise across the package suite we also overlay the
+[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)
+Gillespie SSA (used as the canonical ground truth in EBM and NO vignettes).
+At $N=100$ this is on the small side for a smooth ribbon — we average across
+several graph realisations to reduce conditioning on a single graph.
+
+```{julia}
+include("../_validation.jl")
+
+t_no, μ_no, σ_no = gillespie_ribbon(
+    sir_model(τ = :β),                        # NBM model → NO adapter
+    Dict(:β => τ_val, :γ => γ_val),
+    regular_graph_builder(N, k);
+    N = N, n_graphs = 5, nsims_per_graph = 20,
+    tspan = (0.0, tmax), seed_fraction = length(initial_seed) / N)
+```
+
+```{julia}
+#| label: fig-no-validation-01
+#| fig-cap: "NetworkOutbreaks SSA ribbon (matched per-closure colors) over the order-1 and order-2 closures."
+plot(t_no, μ_no[:I] .* N, ribbon = σ_no[:I] .* N,
+     label = "NO SSA (mean ± 1σ)", color = :darkred, fillalpha = 0.18, linealpha = 0.5)
+plot!(t_ib, I_ib, label = "Order-1 individual-based",
+      lw = 2, ls = :dash, color = :red)
+plot!(t_pb, I_pb, label = "Order-2 pair-based",
+      lw = 2, color = :darkred)
+xlabel!("Time"); ylabel!("Number infected")
+title!("NodeBasedModels closures vs NetworkOutbreaks SSA")
+```
+
+The pair-based closure tracks the SSA ribbon mean closely; the individual-
+based closure systematically over-predicts the peak, illustrating the
+moment-closure ordering numerically.
 
 The three levels of the moment closure hierarchy trade off accuracy against computational cost:
 

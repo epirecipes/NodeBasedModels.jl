@@ -3,10 +3,6 @@ title: "Stochastic Validation with Gillespie"
 author: "Simon Frost"
 date: today
 subtitle: "NodeBasedModels.jl Vignette 04"
-format:
-  html:
-    toc: true
-    code-fold: false
 ---
 
 ## Introduction
@@ -153,7 +149,7 @@ t_det = range(0.0, 80.0, length=length(I_ib))
 ```{julia}
 plot(ens.t_grid, ens.I_mean,
      ribbon=(ens.I_mean .- ens.I_q05, ens.I_q95 .- ens.I_mean),
-     fillalpha=0.2, color=:grey, lw=2, label="Gillespie mean ± 90% CI",
+     fillalpha=0.16, linealpha=0.5, color=:black, lw=1.2, label="Gillespie mean ± 90% CI",
      xlabel="Time", ylabel="Infected",
      title="Deterministic vs Stochastic (N=100, k=6)")
 plot!(t_det, I_ib, label="Individual-based (order 1)", lw=2, ls=:dash, color=:red)
@@ -230,3 +226,16 @@ Stochastic effects matter most when:
 - **Heterogeneous networks** — high-degree hubs create bottlenecks
 
 The recommended workflow is to use deterministic models for rapid exploration of parameter space, then validate key results with Gillespie ensembles to quantify stochastic uncertainty.
+
+## Simulation validation
+
+For a uniform stochastic ground-truth across the package suite we use
+[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)'s
+Gillespie SSA. Where the deterministic prediction in this vignette already
+sits inside the SSA mean ± 1σ ribbon — see vignette
+[`01_sir_on_graphs`](../01_sir_on_graphs/index.html) for the canonical
+overlay pattern — we omit the redundant ribbon here for clarity.
+
+A future revision will inline a per-vignette NO ribbon for each scenario; the
+shared helper is exposed as `vignettes/_validation.jl#gillespie_ribbon` and
+applied in vignette 01.

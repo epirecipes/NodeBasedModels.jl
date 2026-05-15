@@ -3,10 +3,6 @@ title: "Population-Level vs Graph-Instance Models"
 author: "Simon Frost"
 date: today
 subtitle: "NodeBasedModels.jl Vignette 06"
-format:
-  html:
-    toc: true
-    code-fold: false
 ---
 
 ## Introduction
@@ -351,3 +347,38 @@ The graph-instance estimate may differ from the population-level value due to fi
 3. **Quantify uncertainty** with Gillespie: run stochastic simulations to assess the impact of stochastic effects (see [Vignette 04](04_stochastic_validation.qmd))
 
 This layered approach uses the cheapest model that answers your question, escalating to more detailed (and expensive) models only when needed.
+
+## Simulation validation
+
+We overlay the
+[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)
+Gillespie SSA on the regular-graph scenario where the population-level and
+graph-instance models are expected to agree ($\tau = 0.125$, $\gamma = 0.25$
+on a 6-regular host of $N = 200$). The SSA mean ± 1σ ribbon brackets both
+the individual-based and pair-based deterministic predictions.
+
+```{julia}
+include("../_validation.jl")
+
+N_v = 200
+prog_no = sir_model(τ = :β)
+params_no = Dict(:β => 0.125, :γ => 0.25)
+
+t_no, μ_no, σ_no = gillespie_ribbon(prog_no, params_no,
+    regular_graph_builder(N_v, 6);
+    N = N_v, n_graphs = 8, nsims_per_graph = 25,
+    tspan = (0.0, 40.0), seed_fraction = 1 / N_v, major_outbreak_thresh = 0.2,
+    tgrid = collect(0.0:0.5:40.0))
+```
+
+```{julia}
+#| label: fig-nbm-06-no-ribbon
+#| fig-cap: "Graph-instance individual-based and pair-based deterministic curves vs NetworkOutbreaks SSA mean ± 1σ ribbon (8 host graphs × 25 SSA replicates, N=200, k=6, ε=1/200)."
+p = plot(ib.sol.t, I_ib ./ nv(g), label = "Individual-based", lw = 2, ls = :dash, color = :red,
+         xlabel = "Time", ylabel = "Infected (normalised)",
+         title = "Graph-instance vs NetworkOutbreaks SSA")
+plot!(p, pb.sol.t, I_pb ./ nv(g), label = "Pair-based", lw = 2, color = :blue)
+plot!(p, t_no, μ_no[:I], ribbon = σ_no[:I],
+      label = "SSA (mean ± 1σ)", color = :black, fillalpha = 0.18, linealpha = 0.5, lw = 1)
+p
+```

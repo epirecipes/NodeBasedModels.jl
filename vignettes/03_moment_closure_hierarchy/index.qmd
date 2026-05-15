@@ -3,10 +3,6 @@ title: "The Moment Closure Hierarchy"
 author: "Simon Frost"
 date: today
 subtitle: "NodeBasedModels.jl Vignette 03"
-format:
-  html:
-    toc: true
-    code-fold: false
 ---
 
 ## Introduction
@@ -74,8 +70,8 @@ Unlike population-level models, node-based models resolve the epidemic **at each
 ```{julia}
 ib_result = generate_individual_based(
     sir_model(), net;
-    infection_rate = 0.2,
-    recovery_rate  = 0.1,
+    infection_rate = 0.25,
+    recovery_rate  = 0.25,
     initial_infected = [1],
     tspan  = (0.0, 60.0),
     saveat = 0.5
@@ -112,8 +108,8 @@ The error grows with the density of short cycles in the graph. We demonstrate th
 ```{julia}
 pb_result = generate_pair_based(
     sir_model(), net;
-    infection_rate = 0.2,
-    recovery_rate  = 0.1,
+    infection_rate = 0.25,
+    recovery_rate  = 0.25,
     initial_infected = [1],
     tspan  = (0.0, 60.0),
     saveat = 0.5
@@ -148,8 +144,8 @@ println("Tree — nodes: ", nv(g_tree), ", edges: ", ne(g_tree))
 ```{julia}
 pb_tree = generate_pair_based(
     sir_model(), net_tree;
-    infection_rate = 0.3,
-    recovery_rate  = 0.1,
+    infection_rate = 0.25,
+    recovery_rate  = 0.25,
     initial_infected = [1],
     tspan  = (0.0, 50.0),
     saveat = 0.5
@@ -160,8 +156,8 @@ gill_tree = gillespie_sir_average(
     nruns          = 50,
     dt             = 0.5,
     tmax_grid      = 50.0,
-    infection_rate = 0.3,
-    recovery_rate  = 0.1,
+    infection_rate = 0.25,
+    recovery_rate  = 0.25,
     initial_infected = [1]
 )
 
@@ -175,7 +171,7 @@ plot!(p, gill_tree.t_grid, gill_tree.I_mean, label = "Gillespie mean (n=50)",
       lw = 2, color = :black)
 plot!(p, gill_tree.t_grid, gill_tree.I_mean,
       ribbon = (gill_tree.I_mean .- gill_tree.I_q05, gill_tree.I_q95 .- gill_tree.I_mean),
-      fillalpha = 0.2, color = :grey, label = "Gillespie 90% CI")
+      fillalpha = 0.18, linealpha = 0.0, color = :black, label = "Gillespie 90% CI")
 p
 ```
 
@@ -193,8 +189,8 @@ net_comp = GraphNetwork(g_comp)
 ```{julia}
 pb_comp = generate_pair_based(
     sir_model(), net_comp;
-    infection_rate = 0.02,
-    recovery_rate  = 0.1,
+    infection_rate = 0.0263,
+    recovery_rate  = 0.25,
     initial_infected = [1],
     tspan  = (0.0, 30.0),
     saveat = 0.25
@@ -205,8 +201,8 @@ gill_comp = gillespie_sir_average(
     nruns          = 50,
     dt             = 0.25,
     tmax_grid      = 30.0,
-    infection_rate = 0.02,
-    recovery_rate  = 0.1,
+    infection_rate = 0.0263,
+    recovery_rate  = 0.25,
     initial_infected = [1]
 )
 
@@ -220,7 +216,7 @@ plot!(p, gill_comp.t_grid, gill_comp.I_mean, label = "Gillespie mean (n=50)",
       lw = 2, color = :black)
 plot!(p, gill_comp.t_grid, gill_comp.I_mean,
       ribbon = (gill_comp.I_mean .- gill_comp.I_q05, gill_comp.I_q95 .- gill_comp.I_mean),
-      fillalpha = 0.2, color = :grey, label = "Gillespie 90% CI")
+      fillalpha = 0.18, linealpha = 0.0, color = :black, label = "Gillespie 90% CI")
 p
 ```
 
@@ -240,10 +236,10 @@ for N in sizes
     net_n = GraphNetwork(g_n)
 
     ib_n = generate_individual_based(sir_model(), net_n;
-        infection_rate = 0.2, recovery_rate = 0.1,
+        infection_rate = 0.25, recovery_rate = 0.25,
         initial_infected = [1], tspan = (0.0, 80.0), saveat = 1.0)
     pb_n = generate_pair_based(sir_model(), net_n;
-        infection_rate = 0.2, recovery_rate = 0.1,
+        infection_rate = 0.25, recovery_rate = 0.25,
         initial_infected = [1], tspan = (0.0, 80.0), saveat = 1.0)
 
     I_ib_n = aggregate(ib_n, :I)
@@ -280,3 +276,42 @@ As $N$ grows, the normalised gap shrinks — the local tree-like structure of la
 - Switch to **order-2** when pair correlations matter, especially on sparse graphs with low clustering.
 - Use **Gillespie** for validation and when quantitative accuracy is essential, averaging over enough runs to reduce sampling noise.
 - Remember that on **tree-like** graphs (large, sparse, random), all three levels tend to agree. The biggest discrepancies arise on small, dense, or highly clustered networks.
+
+## Simulation validation
+
+We overlay the
+[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)
+Gillespie SSA on the order-1/order-2 comparison from above. Because
+$N = 30$ leaves a very noisy single-graph trajectory, the ribbon is
+averaged over multiple host-graph realisations from the same
+`random_regular_graph(30, 4)` family. The seed fraction
+$\varepsilon = 1/30$ matches the deterministic single-node seed; rates
+follow the canonical anchor ($\tau = 0.25$, $\gamma = 0.25$, so
+$R_0 = \tau(k-2)/\gamma = 2$).
+
+```{julia}
+include("../_validation.jl")
+
+N_v = 30
+prog_no = sir_model(τ = :β)
+params_no = Dict(:β => 0.25, :γ => 0.25)
+
+t_no, μ_no, σ_no = gillespie_ribbon(prog_no, params_no,
+    regular_graph_builder(N_v, 4);
+    N = N_v, n_graphs = 12, nsims_per_graph = 25,
+    tspan = (0.0, 60.0), seed_fraction = 1 / N_v,
+    major_outbreak_thresh = 0.2)
+```
+
+```{julia}
+#| label: fig-nbm-03-no-ribbon
+#| fig-cap: "NetworkOutbreaks SSA mean ± 1σ ribbon (12 host graphs × 25 SSA replicates) overlaid on order-1 (NIMFA) and order-2 (Kirkwood) deterministic trajectories. The exact stochastic distribution sits between (and slightly below) both deterministic closures, consistent with the documented closure ordering."
+p = plot(t_vals, I_ib, label = "Order-1 (NIMFA)", lw = 2, ls = :dash, color = :red,
+         xlabel = "Time", ylabel = "Number infected",
+         title = "Order-1 vs Order-2 vs NetworkOutbreaks SSA (N=30)")
+plot!(p, t_pb, I_pb, label = "Order-2 (Kirkwood)", lw = 2, color = :darkred)
+plot!(p, t_no, μ_no[:I] .* N_v, ribbon = σ_no[:I] .* N_v,
+      label = "NO SSA (mean ± 1σ)", color = :black,
+      fillalpha = 0.18, linealpha = 0.5, lw = 1)
+p
+```

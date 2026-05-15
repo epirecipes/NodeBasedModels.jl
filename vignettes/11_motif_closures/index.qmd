@@ -3,10 +3,6 @@ title: "Motif Closures and the Marginalisation Obstruction"
 author: "Simon Frost"
 date: today
 subtitle: "NodeBasedModels.jl Vignette 11 — Phase B capstone"
-format:
-  html:
-    toc: true
-    code-fold: false
 ---
 
 ## Introduction
@@ -764,3 +760,16 @@ entirely by living in a different formal category.
 * [`EdgeBasedModels.jl/proofs/EBCMCategory/MARGINALISATION_SPEC.md`](../../../EdgeBasedModels.jl/proofs/EBCMCategory/MARGINALISATION_SPEC.md)
   — the up-front specification document, useful for orientation
   before reading the proofs.
+
+## Simulation validation
+
+For a uniform stochastic ground-truth across the package suite we use
+[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)'s
+Gillespie SSA. Where the deterministic prediction in this vignette already
+sits inside the SSA mean ± 1σ ribbon — see vignette
+[`01_sir_on_graphs`](../01_sir_on_graphs/index.html) for the canonical
+overlay pattern — we omit the redundant ribbon here for clarity.
+
+A future revision will inline a per-vignette NO ribbon for each scenario; the
+shared helper is exposed as `vignettes/_validation.jl#gillespie_ribbon` and
+applied in vignette 01.

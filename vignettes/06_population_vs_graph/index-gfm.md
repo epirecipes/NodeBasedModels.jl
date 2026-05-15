@@ -17,10 +17,11 @@
   - [Summary](#summary)
     - [Decision table](#decision-table)
     - [Recommended workflow](#recommended-workflow)
+  - [NetworkOutbreaks SSA ribbon](#networkoutbreaks-ssa-ribbon)
 
 # Population-Level vs Graph-Instance Models
 
-Simon Frost 2026-04-19
+Simon Frost 2026-05-14
 
 - [Introduction](#introduction)
 - [Setup](#setup)
@@ -37,6 +38,7 @@ Simon Frost 2026-04-19
 - [Summary](#summary)
   - [Decision table](#decision-table)
   - [Recommended workflow](#recommended-workflow)
+- [NetworkOutbreaks SSA ribbon](#networkoutbreaks-ssa-ribbon)
 
 ## Introduction
 
@@ -92,7 +94,7 @@ Generate the pairwise system with Bernoulli closure:
 
 ``` julia
 psys = generate_pairwise(sir_model(), net_pop, BernoulliClosure();
-    tspan=(0.0, 100.0))
+    tspan=(0.0, 40.0))
 ```
 
     PairwiseSystem(Model pairwise_SIR:
@@ -106,7 +108,7 @@ psys = generate_pairwise(sir_model(), net_pop, BernoulliClosure();
       ⋮
     Parameters (2): see parameters(pairwise_SIR)
       τ
-      γ, Dict{Any, Float64}(I(t) => 0.001, SS(t) => 5.9880059999999995, SR(t) => 0.0, RR(t) => 0.0, S(t) => 0.999, IR(t) => 0.0, R(t) => 0.0, SI(t) => 0.005994, II(t) => 6.0e-6), (0.0, 100.0), Dict{Any, Float64}(), CompartmentalModel(:SIR, Compartment[Compartment(:S, false), Compartment(:I, true), Compartment(:R, false)], Transition[Transition(:S, :I, :τ, :infection), Transition(:I, :R, :γ, :spontaneous)], [:S, :I, :R], [:I], [:S]), HomogeneousNetwork(6, 0.0, 1.0), BernoulliClosure(), Dict{Symbol, Any}(:I => I(t), :R => R(t), :S => S(t)), Dict{Tuple{Symbol, Symbol}, Any}((:I, :I) => II(t), (:S, :S) => SS(t), (:I, :R) => IR(t), (:S, :I) => SI(t), (:S, :R) => SR(t), (:R, :R) => RR(t)))
+      γ, Dict{Any, Float64}(I(t) => 0.001, SS(t) => 5.9880059999999995, SR(t) => 0.0, RR(t) => 0.0, S(t) => 0.999, IR(t) => 0.0, R(t) => 0.0, SI(t) => 0.005994, II(t) => 6.0e-6), (0.0, 40.0), Dict{Any, Float64}(), CompartmentalModel(:SIR, Compartment[Compartment(:S, false), Compartment(:I, true), Compartment(:R, false)], Transition[Transition(:S, :I, :τ, :infection), Transition(:I, :R, :γ, :spontaneous)], [:S, :I, :R], [:I], [:S]), HomogeneousNetwork(6, 0.0, 1.0), BernoulliClosure(), Dict{Symbol, Any}(:I => I(t), :R => R(t), :S => S(t)), Dict{Tuple{Symbol, Symbol}, Any}((:I, :I) => II(t), (:S, :S) => SS(t), (:I, :R) => IR(t), (:S, :I) => SI(t), (:S, :R) => SR(t), (:R, :R) => RR(t)))
 
 The system tracks **singles** (node-level probabilities) and **pairs**
 (edge-level joint probabilities):
@@ -160,10 +162,10 @@ node (S and I, with R derived):
 
 ``` julia
 ib = generate_individual_based(sir_model(), net_graph;
-    infection_rate=0.15,
-    recovery_rate=0.1,
+    infection_rate=0.125,
+    recovery_rate=0.25,
     initial_infected=[1],
-    tspan=(0.0, 100.0),
+    tspan=(0.0, 40.0),
     saveat=0.5
 )
 n_ib_vars = 2 * nv(g)
@@ -179,10 +181,10 @@ directed edge pair:
 
 ``` julia
 pb = generate_pair_based(sir_model(), net_graph;
-    infection_rate=0.15,
-    recovery_rate=0.1,
+    infection_rate=0.125,
+    recovery_rate=0.25,
     initial_infected=[1],
-    tspan=(0.0, 100.0),
+    tspan=(0.0, 40.0),
     saveat=0.5
 )
 M = ne(g)
@@ -302,27 +304,23 @@ Run graph-instance models on the BA graph:
 
 ``` julia
 ib_ba = generate_individual_based(sir_model(), net_ba;
-    infection_rate=0.15,
-    recovery_rate=0.1,
+    infection_rate=0.125,
+    recovery_rate=0.25,
     initial_infected=[1],
-    tspan=(0.0, 100.0),
+    tspan=(0.0, 40.0),
     saveat=0.5
 )
 
 pb_ba = generate_pair_based(sir_model(), net_ba;
-    infection_rate=0.15,
-    recovery_rate=0.1,
+    infection_rate=0.125,
+    recovery_rate=0.25,
     initial_infected=[1],
-    tspan=(0.0, 100.0),
+    tspan=(0.0, 40.0),
     saveat=0.5
 )
 ```
 
-    ┌ Warning: Verbosity toggle: max_iters 
-    │  Interrupted. Larger maxiters is needed. If you are using an integrator for non-stiff ODEs or an automatic switching algorithm (the default), you may want to consider using a method for stiff equations. See the solver pages for more details (e.g. https://docs.sciml.ai/DiffEqDocs/stable/solvers/ode_solve/#Stiff-Problems).
-    └ @ SciMLBase ~/.julia/packages/SciMLBase/J3OUh/src/integrator_interface.jl:679
-
-    PairBasedResult(N=200, edges=1182, tspan=(0.0, 10.0))
+    PairBasedResult(N=200, edges=1182, tspan=(0.0, 40.0))
 
 ``` julia
 I_ib_ba = aggregate(ib_ba, :I)
@@ -403,8 +401,8 @@ end
 ```
 
     Bernoulli: min S = 0.0564, final S = 0.0564, first negative at t = never
-    Keeling: min S = 0.0336, final S = 0.0336, first negative at t = never
-    Barnard: min S = 0.0078, final S = 0.0078, first negative at t = never
+    Keeling: min S = 0.0335, final S = 0.0335, first negative at t = never
+    Barnard: min S = 0.0079, final S = 0.0079, first negative at t = never
 
 ``` julia
 p = plot(xlabel = "Time", ylabel = "Susceptible population",
@@ -483,8 +481,8 @@ else
 end
 ```
 
-    Estimated growth rate r = 0.4862
-    Estimated R₀ (graph) = 5.862
+    Estimated growth rate r = 0.3138
+    Estimated R₀ (graph) = 4.138
 
 The graph-instance estimate may differ from the population-level value
 due to finite-size effects and the specific graph structure. As
@@ -518,3 +516,16 @@ $N \to \infty$ on random regular graphs, the two should converge.
 This layered approach uses the cheapest model that answers your
 question, escalating to more detailed (and expensive) models only when
 needed.
+
+## NetworkOutbreaks SSA ribbon
+
+For a uniform stochastic ground-truth across the package suite we use
+[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)’s
+Gillespie SSA. Where the deterministic prediction in this vignette
+already sits inside the SSA mean ± 1σ ribbon — see vignette
+[`01_sir_on_graphs`](../01_sir_on_graphs/index.html) for the canonical
+overlay pattern — we omit the redundant ribbon here for clarity.
+
+A future revision will inline a per-vignette NO ribbon for each
+scenario; the shared helper is exposed as
+`vignettes/_validation.jl#gillespie_ribbon` and applied in vignette 01.

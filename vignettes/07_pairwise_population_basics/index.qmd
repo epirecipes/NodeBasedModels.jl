@@ -3,10 +3,6 @@ title: "SIR on a Network: Pair-Approximation Basics"
 author: "Simon Frost"
 date: today
 subtitle: "NodeBasedModels.jl Vignette 07 (population pairwise basics)"
-format:
-  html:
-    toc: true
-    code-fold: false
 ---
 
 ## Introduction
@@ -41,7 +37,7 @@ using Plots
 ## Building the system
 
 ::: {.callout-note}
-**$R_0=2$ anchor.** For `regular_network(6)` with Bernoulli closure, $R_0=\tau(n-2)/\gamma$. With $\gamma=0.25$, this gives $\tau=2\gamma/(6-2)=0.125$ and 1% initial infection.
+**$R_0=2$ anchor.** For `regular_network(6)` with Bernoulli closure, $R_0=\tau(n-2)/\gamma$. With $\gamma=0.25$, this gives $\tau=2\gamma/(6-2)=0.125$ and 0.1% initial infection.
 :::
 
 ```{julia}
@@ -50,7 +46,7 @@ network = regular_network(6)          # 6-regular, no clustering (ϕ=0)
 closure = BernoulliClosure()
 psys    = generate_pairwise(model, network, closure;
                             tspan=(0.0, 200.0), N=1.0,
-                            seed_fraction = 0.01)
+                            seed_fraction = 0.001)
 ```
 
 The generator returns a `PairwiseSystem` containing the MTK `ODESystem`, default initial conditions, and parameter symbols.
@@ -64,10 +60,10 @@ The generated `PairwiseSystem` stores singles, pairs, default initial conditions
 
 ## Initial conditions
 
-For a 6-regular network with $S(0) = 0.99$, $I(0) = 0.01$, $R(0) = 0$, the random-mixing initial pair counts under the mixed convention are $[XY](0) = k \cdot p_X \cdot p_Y$ with $k = 6$:
+For a 6-regular network with $S(0) = 0.999$, $I(0) = 0.001$, $R(0) = 0$, the random-mixing initial pair counts under the mixed convention are $[XY](0) = k \cdot p_X \cdot p_Y$ with $k = 6$:
 
 ```{julia}
-S0, I0, R0 = 0.99, 0.01, 0.0
+S0, I0, R0 = 0.999, 0.001, 0.0
 k = 6.0
 ic = copy(psys.u0)
 ic[psys.singles[:S]] = S0
@@ -124,3 +120,42 @@ For $\tau=0.125$, $\gamma=0.25$, $k=6$, the pair-approximation R₀ is $\tau(n-2
 ## Summary
 
 `generate_pairwise(model, network, closure)` builds the full pair-system in one call. The next vignette compares different closure choices on a clustered network.
+
+## Simulation validation
+
+We overlay the
+[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)
+Gillespie SSA on the pair-approximation. The host graphs are 6-regular
+on $N = 1000$ nodes (matching the population-level pair model's $k = 6$),
+and the seed fraction matches the deterministic $\varepsilon = 0.001$.
+
+```{julia}
+include("../_validation.jl")
+
+N_v = 1000
+prog_no = sir_model(τ = :β)
+params_no = Dict(:β => 0.125, :γ => 0.25)
+
+t_no, μ_no, σ_no = gillespie_ribbon(prog_no, params_no,
+    regular_graph_builder(N_v, 6);
+    N = N_v, n_graphs = 5, nsims_per_graph = 20,
+    tspan = (0.0, 200.0), seed_fraction = 0.001, major_outbreak_thresh = 0.2,
+    tgrid = collect(0.0:1.0:200.0))
+```
+
+```{julia}
+#| label: fig-nbm-07-no-ribbon
+#| fig-cap: "Pair-approximation singles (lines) vs NetworkOutbreaks SSA mean ± 1σ ribbons (5 host graphs × 20 SSA replicates, N=1000, k=6, ε=0.001)."
+p = plot(sol.t, sol[psys.singles[:S]], label = "S (PA)", lw = 2, color = :blue,
+         xlabel = "time", ylabel = "fraction",
+         title = "Pair-approximation vs NetworkOutbreaks SSA")
+plot!(p, sol.t, sol[psys.singles[:I]], label = "I (PA)", lw = 2, color = :red)
+plot!(p, sol.t, sol[psys.singles[:R]], label = "R (PA)", lw = 2, color = :green)
+plot!(p, t_no, μ_no[:S], ribbon = σ_no[:S],
+      label = "S (SSA)", color = :blue,  fillalpha = 0.18, linealpha = 0.5, lw = 1)
+plot!(p, t_no, μ_no[:I], ribbon = σ_no[:I],
+      label = "I (SSA)", color = :red,   fillalpha = 0.18, linealpha = 0.5, lw = 1)
+plot!(p, t_no, μ_no[:R], ribbon = σ_no[:R],
+      label = "R (SSA)", color = :green, fillalpha = 0.18, linealpha = 0.5, lw = 1)
+p
+```
