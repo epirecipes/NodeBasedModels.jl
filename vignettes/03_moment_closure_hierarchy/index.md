@@ -1,6 +1,6 @@
 # The Moment Closure Hierarchy
 Simon Frost
-2026-05-14
+2026-05-15
 
 - [Introduction](#introduction)
   - [Order-1: Individual-based (NIMFA)](#order-1-individual-based-nimfa)
@@ -355,13 +355,50 @@ increasingly accurate.
 
 ## NetworkOutbreaks SSA ribbon
 
-For a uniform stochastic ground-truth across the package suite we use
-[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)’s
-Gillespie SSA. Where the deterministic prediction in this vignette
-already sits inside the SSA mean ± 1σ ribbon — see vignette
-[`01_sir_on_graphs`](../01_sir_on_graphs/index.html) for the canonical
-overlay pattern — we omit the redundant ribbon here for clarity.
+We overlay the
+[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)
+Gillespie SSA on the order-1/order-2 comparison from above. Because
+$N = 30$ leaves a very noisy single-graph trajectory, the ribbon is
+averaged over multiple host-graph realisations from the same
+`random_regular_graph(30, 4)` family. The seed fraction
+$\varepsilon = 1/30$ matches the deterministic single-node seed; rates
+mirror the demo above ($\tau = 0.2$, $\gamma = 0.1$,
+$R_0 = \tau(k-2)/\gamma = 4$).
 
-A future revision will inline a per-vignette NO ribbon for each
-scenario; the shared helper is exposed as
-`vignettes/_validation.jl#gillespie_ribbon` and applied in vignette 01.
+``` julia
+include("../_validation.jl")
+
+N_v = 30
+prog_no = sir_model(τ = :β)
+params_no = Dict(:β => 0.2, :γ => 0.1)
+
+t_no, μ_no, σ_no = gillespie_ribbon(prog_no, params_no,
+    regular_graph_builder(N_v, 4);
+    N = N_v, n_graphs = 12, nsims_per_graph = 25,
+    tspan = (0.0, 60.0), seed_fraction = 1 / N_v)
+```
+
+    ([0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5  …  55.5, 56.0, 56.5, 57.0, 57.5, 58.0, 58.5, 59.0, 59.5, 60.0], Dict(:I => [0.03333333333333333, 0.04477777777777778, 0.05977777777777778, 0.07466666666666667, 0.09122222222222223, 0.1078888888888889, 0.12944444444444445, 0.15066666666666664, 0.17333333333333334, 0.19577777777777777  …  0.00911111111111111, 0.008666666666666666, 0.008111111111111112, 0.008, 0.007333333333333333, 0.007222222222222223, 0.006888888888888889, 0.0067777777777777775, 0.006333333333333333, 0.005888888888888889], :R => [0.0, 0.0013333333333333333, 0.0036666666666666666, 0.0064444444444444445, 0.01, 0.014666666666666666, 0.01988888888888889, 0.02666666666666667, 0.034777777777777776, 0.044000000000000004  …  0.8454444444444444, 0.8458888888888888, 0.8464444444444444, 0.8465555555555556, 0.8472222222222222, 0.8473333333333334, 0.8476666666666667, 0.8477777777777777, 0.8482222222222222, 0.8486666666666667], :S => [0.9666666666666667, 0.9538888888888889, 0.9365555555555556, 0.9188888888888889, 0.8987777777777778, 0.8774444444444445, 0.8506666666666667, 0.8226666666666667, 0.791888888888889, 0.7602222222222222  …  0.14544444444444443, 0.14544444444444443, 0.14544444444444443, 0.14544444444444443, 0.14544444444444443, 0.14544444444444443, 0.14544444444444443, 0.14544444444444443, 0.14544444444444443, 0.14544444444444443]), Dict(:I => [0.0, 0.025401763667578493, 0.03908972929942836, 0.05482040540487738, 0.07120027042511107, 0.08787927656082636, 0.09797118215646447, 0.11483884302021131, 0.13280273465640122, 0.14750730340699933  …  0.019808322169033794, 0.018860121929151465, 0.01779739256083804, 0.017319435299491547, 0.016068415601206934, 0.015769223216199137, 0.015323425943093456, 0.015251717579886807, 0.014702550609532484, 0.01385231155312341], :R => [0.0, 0.006542886560876246, 0.010447084907026774, 0.013737825821179843, 0.01601281538050871, 0.019075628394949595, 0.023467259122280367, 0.027262027336984355, 0.032625521073144426, 0.039378297523733896  …  0.31853084259398934, 0.31861856142941963, 0.3188118192494594, 0.3188363543181387, 0.31907589455071583, 0.31910013758616046, 0.3192075495354335, 0.31925490798345196, 0.319432250587231, 0.31953910509959244], :S => [0.0, 0.024147806554166165, 0.03758783429193986, 0.05389567894638712, 0.0694672797832589, 0.08740098536790114, 0.10066445913694332, 0.12071384358349956, 0.14248467573488072, 0.16016048559814408  …  0.32178083917520595, 0.32178083917520595, 0.32178083917520595, 0.32178083917520595, 0.32178083917520595, 0.32178083917520595, 0.32178083917520595, 0.32178083917520595, 0.32178083917520595, 0.32178083917520595]))
+
+``` julia
+p = plot(t_vals, I_ib, label = "Order-1 (NIMFA)", lw = 2, ls = :dash, color = :red,
+         xlabel = "Time", ylabel = "Number infected",
+         title = "Order-1 vs Order-2 vs NetworkOutbreaks SSA (N=30)")
+plot!(p, t_pb, I_pb, label = "Order-2 (Kirkwood)", lw = 2, color = :darkred)
+plot!(p, t_no, μ_no[:I] .* N_v, ribbon = σ_no[:I] .* N_v,
+      label = "NO SSA (mean ± 1σ)", color = :black,
+      fillalpha = 0.18, linealpha = 0.5, lw = 1)
+p
+```
+
+<div id="fig-nbm-03-no-ribbon">
+
+![](index_files/figure-commonmark/fig-nbm-03-no-ribbon-output-1.svg)
+
+Figure 1: NetworkOutbreaks SSA mean ± 1σ ribbon (12 host graphs × 25 SSA
+replicates) overlaid on order-1 (NIMFA) and order-2 (Kirkwood)
+deterministic trajectories. The exact stochastic distribution sits
+between (and slightly below) both deterministic closures, consistent
+with the documented closure ordering.
+
+</div>

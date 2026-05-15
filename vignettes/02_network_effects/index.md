@@ -1,6 +1,6 @@
 # Effect of Network Topology
 Simon Frost
-2026-05-14
+2026-05-15
 
 - [Introduction](#introduction)
 - [Setup](#setup)
@@ -282,13 +282,63 @@ Network structure controls three key quantities:
 
 ## NetworkOutbreaks SSA ribbon
 
-For a uniform stochastic ground-truth across the package suite we use
-[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)’s
-Gillespie SSA. Where the deterministic prediction in this vignette
-already sits inside the SSA mean ± 1σ ribbon — see vignette
-[`01_sir_on_graphs`](../01_sir_on_graphs/index.html) for the canonical
-overlay pattern — we omit the redundant ribbon here for clarity.
+We overlay the
+[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)
+Gillespie SSA on each topology to confirm that the pair-based prediction
+sits inside the stochastic ensemble. Because $N = 200$ is small here,
+each ribbon is averaged over multiple graph realisations from the same
+family. The seed fraction is matched to the deterministic single-node
+seed ($\varepsilon = 1/200 = 0.005$).
 
-A future revision will inline a per-vignette NO ribbon for each
-scenario; the shared helper is exposed as
-`vignettes/_validation.jl#gillespie_ribbon` and applied in vignette 01.
+``` julia
+include("../_validation.jl")
+
+N_v = 200
+ε_v = 1 / N_v
+prog_no = sir_model(τ = :β)
+params_no = Dict(:β => τ, :γ => γ)
+
+t_reg, μ_reg, σ_reg = gillespie_ribbon(prog_no, params_no,
+    regular_graph_builder(N_v, 6);
+    N = N_v, n_graphs = 6, nsims_per_graph = 20,
+    tspan = (0.0, 40.0), seed_fraction = ε_v)
+t_er, μ_er, σ_er = gillespie_ribbon(prog_no, params_no,
+    poisson_graph_builder(N_v, 6.0);
+    N = N_v, n_graphs = 6, nsims_per_graph = 20,
+    tspan = (0.0, 40.0), seed_fraction = ε_v)
+t_ba, μ_ba, σ_ba = gillespie_ribbon(prog_no, params_no,
+    barabasi_albert_graph_builder(N_v, 3);
+    N = N_v, n_graphs = 6, nsims_per_graph = 20,
+    tspan = (0.0, 40.0), seed_fraction = ε_v)
+```
+
+    ([0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5  …  35.5, 36.0, 36.5, 37.0, 37.5, 38.0, 38.5, 39.0, 39.5, 40.0], Dict(:I => [0.005, 0.007041666666666667, 0.009958333333333333, 0.013666666666666667, 0.017708333333333333, 0.02379166666666667, 0.030750000000000003, 0.040791666666666664, 0.049833333333333334, 0.058916666666666666  …  0.0025416666666666665, 0.0021666666666666666, 0.0018333333333333333, 0.0017499999999999998, 0.0014166666666666666, 0.00125, 0.0011666666666666668, 0.0010833333333333333, 0.0009583333333333334, 0.0007916666666666666], :R => [0.0, 0.0007083333333333333, 0.0017916666666666667, 0.0034583333333333332, 0.00575, 0.008458333333333333, 0.01175, 0.016041666666666666, 0.021166666666666667, 0.027083333333333334  …  0.41679166666666667, 0.4171666666666667, 0.4175833333333333, 0.41775, 0.4180833333333333, 0.4182916666666667, 0.41841666666666666, 0.41850000000000004, 0.41862499999999997, 0.41883333333333334], :S => [0.995, 0.99225, 0.9882500000000001, 0.9828749999999999, 0.9765416666666666, 0.9677500000000001, 0.9575, 0.9431666666666666, 0.929, 0.914  …  0.5806666666666667, 0.5806666666666667, 0.5805833333333333, 0.5805, 0.5805, 0.5804583333333333, 0.5804166666666667, 0.5804166666666667, 0.5804166666666667, 0.580375]), Dict(:I => [0.0, 0.005742947203050956, 0.01381899547197052, 0.021632271773274966, 0.028549645933236466, 0.03693052660764814, 0.046826382350482865, 0.059989480286947304, 0.07124915843033384, 0.08124085813685332  …  0.009701334772006555, 0.009045481097836454, 0.007776643908280133, 0.007822881757485323, 0.006552417391273834, 0.0056971908159440575, 0.005009794328681195, 0.004858646167095399, 0.004410445647814394, 0.0037794131271183073], :R => [0.0, 0.0017508501336425657, 0.002656515166365826, 0.004289709855486465, 0.006756571653153815, 0.010447866440822552, 0.01437273913532493, 0.020394181009484518, 0.02689641922165065, 0.034419454957215996  …  0.3700311114749458, 0.37036135734442593, 0.3707300221181445, 0.37089311355250615, 0.37119338734994317, 0.37137067024724496, 0.3714784132148109, 0.3715404001014735, 0.37164519680862873, 0.37178692581542305], :S => [0.0, 0.00521995202656728, 0.0143434756637869, 0.02377823399171406, 0.033038021344229083, 0.0451740332194384, 0.05876530732105309, 0.07778426676946144, 0.09564816479458155, 0.11279974074706485  …  0.37226590598912596, 0.37226590598912596, 0.37233996806779723, 0.37237732738390483, 0.37237732738390483, 0.37239684479598595, 0.3724259462418988, 0.3724259462418988, 0.3724259462418988, 0.3724697057784553]))
+
+``` julia
+p = plot(t, I_reg, label = "Regular (PB)", lw = 2, color = :blue,
+         xlabel = "Time", ylabel = "Number infected",
+         title = "Pair-based vs NetworkOutbreaks SSA across topologies")
+plot!(p, t_reg, μ_reg[:I] .* N_v, ribbon = σ_reg[:I] .* N_v,
+      label = "Regular (SSA)", color = :blue,
+      fillalpha = 0.2, linealpha = 0.5, lw = 1)
+plot!(p, t, I_er, label = "Erdős–Rényi (PB)", lw = 2, color = :orange)
+plot!(p, t_er, μ_er[:I] .* N_v, ribbon = σ_er[:I] .* N_v,
+      label = "Erdős–Rényi (SSA)", color = :orange,
+      fillalpha = 0.2, linealpha = 0.5, lw = 1)
+plot!(p, range(0.0, 40.0, length = length(I_ba)), I_ba,
+      label = "Barabási–Albert (PB)", lw = 2, color = :purple)
+plot!(p, t_ba, μ_ba[:I] .* N_v, ribbon = σ_ba[:I] .* N_v,
+      label = "Barabási–Albert (SSA)", color = :purple,
+      fillalpha = 0.2, linealpha = 0.5, lw = 1)
+p
+```
+
+<div id="fig-nbm-02-no-ribbon">
+
+![](index_files/figure-commonmark/fig-nbm-02-no-ribbon-output-1.svg)
+
+Figure 1: Pair-based deterministic predictions (lines) vs
+NetworkOutbreaks SSA mean ± 1σ ribbons (shaded). Each ribbon averages 6
+graph realisations × 20 stochastic runs at N=200, ε=1/200.
+
+</div>

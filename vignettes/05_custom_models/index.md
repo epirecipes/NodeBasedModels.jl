@@ -1,6 +1,6 @@
 # Custom Compartmental Models
 Simon Frost
-2026-05-14
+2026-05-15
 
 - [Introduction](#introduction)
 - [Setup](#setup)
@@ -410,13 +410,55 @@ heterogeneity.
 
 ## NetworkOutbreaks SSA ribbon
 
-For a uniform stochastic ground-truth across the package suite we use
-[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)’s
-Gillespie SSA. Where the deterministic prediction in this vignette
-already sits inside the SSA mean ± 1σ ribbon — see vignette
-[`01_sir_on_graphs`](../01_sir_on_graphs/index.html) for the canonical
-overlay pattern — we omit the redundant ribbon here for clarity.
+We overlay the
+[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)
+Gillespie SSA on the SIR and SEIR trajectories to confirm that the
+individual-based deterministic predictions sit inside the stochastic
+ensembles. Both ribbons use 6-regular host graphs of $N = 200$ with the
+deterministic single-node seed $\varepsilon = 1/200 = 0.005$ and the
+demo rates $\tau = 0.15$, $\gamma = 0.1$ ($\sigma = 0.1$ for SEIR).
 
-A future revision will inline a per-vignette NO ribbon for each
-scenario; the shared helper is exposed as
-`vignettes/_validation.jl#gillespie_ribbon` and applied in vignette 01.
+``` julia
+include("../_validation.jl")
+
+N_v = 200
+prog_sir  = sir_model(τ = :β)
+prog_seir = seir_model(τ = :β)
+params    = Dict(:β => 0.15, :γ => 0.1, :σ => 0.1)
+
+t_sir_no, μ_sir_no, σ_sir_no = gillespie_ribbon(prog_sir, params,
+    regular_graph_builder(N_v, 6);
+    N = N_v, n_graphs = 8, nsims_per_graph = 25,
+    tspan = (0.0, 100.0), seed_fraction = 1 / N_v,
+    tgrid = collect(0.0:0.5:100.0))
+
+t_seir_no, μ_seir_no, σ_seir_no = gillespie_ribbon(prog_seir, params,
+    regular_graph_builder(N_v, 6);
+    N = N_v, n_graphs = 8, nsims_per_graph = 25,
+    tspan = (0.0, 100.0), seed_fraction = 1 / N_v,
+    tgrid = collect(0.0:0.5:100.0))
+```
+
+    ([0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5  …  95.5, 96.0, 96.5, 97.0, 97.5, 98.0, 98.5, 99.0, 99.5, 100.0], Dict(:I => [0.005, 0.0048, 0.004775, 0.004725, 0.00485, 0.005024999999999999, 0.005175, 0.0055000000000000005, 0.005699999999999999, 0.005925000000000001  …  0.0297, 0.0286, 0.0277, 0.026375000000000003, 0.025525000000000003, 0.024874999999999998, 0.024300000000000002, 0.023125, 0.022275, 0.021324999999999997], :R => [0.0, 0.00025, 0.000475, 0.00075, 0.0009, 0.0011250000000000001, 0.0014249999999999998, 0.0017000000000000001, 0.0021, 0.0026  …  0.82155, 0.8231499999999999, 0.8247, 0.8264499999999999, 0.8277, 0.8288500000000001, 0.8299, 0.8316, 0.8327500000000001, 0.8340000000000001], :S => [0.995, 0.9927750000000001, 0.991025, 0.98905, 0.9875, 0.9856999999999999, 0.984075, 0.982175, 0.9805750000000001, 0.9791  …  0.13775, 0.1376, 0.137425, 0.13727499999999998, 0.137125, 0.1371, 0.13695000000000002, 0.1367, 0.136575, 0.1365], :E => [0.0, 0.002175, 0.003725, 0.005475, 0.006750000000000001, 0.00815, 0.009325, 0.010625, 0.011625000000000002, 0.012375  …  0.011000000000000001, 0.01065, 0.010175, 0.009899999999999999, 0.009649999999999999, 0.009174999999999999, 0.00885, 0.008575000000000001, 0.0084, 0.008175]), Dict(:I => [0.0, 0.001211336734115285, 0.001960508343472203, 0.002516153840836003, 0.0028755598100379566, 0.0032676847796406982, 0.003894897448027774, 0.004253287230050016, 0.004649525830905912, 0.0050394798128298515  …  0.02875402528080627, 0.028075454685167513, 0.02803820078959397, 0.026904528303170094, 0.026373798765186116, 0.02611069160478906, 0.02585735901199844, 0.025029818900081047, 0.024137365995193626, 0.023720935667564284], :R => [0.0, 0.0010924593066487266, 0.0014697536798378786, 0.001789837307673437, 0.0019257576985612286, 0.0020931510712404815, 0.002317591671494117, 0.002577443710423568, 0.002895152767599439, 0.0031287289309906824  …  0.3238805187908981, 0.32420847176751744, 0.32466087447840924, 0.325075789384908, 0.3252393166044453, 0.3255716696217617, 0.325820171136776, 0.3262816861141111, 0.3264025592014657, 0.32671157350376573], :S => [0.0, 0.0032367821665922852, 0.004574824597785418, 0.005522680508593629, 0.006200178308345365, 0.007247248654857002, 0.008388756234137387, 0.009505056839789977, 0.01036006902248985, 0.010933329247864578  …  0.3337783357064006, 0.3337810494092252, 0.3336696292478715, 0.3335976413383834, 0.3334920450257808, 0.3334618780619503, 0.3333976114741728, 0.3333432142589111, 0.33324224875724257, 0.3332005598214484], :E => [0.0, 0.0031930160912206455, 0.0043409207508112975, 0.005002449148910681, 0.005369511923020312, 0.006083795099612607, 0.006700286876030423, 0.007280066748272057, 0.007780556554739998, 0.007876839340112872  …  0.020249697559624972, 0.02002078066138924, 0.02010261052074441, 0.01999974874214033, 0.02011593283367302, 0.01909890614879297, 0.01923610246882031, 0.019704969018501415, 0.02006747412077414, 0.019818127202870253]))
+
+``` julia
+p = plot(t_sir, I_sir, label = "SIR (IB)", lw = 2, color = :red,
+         xlabel = "Time", ylabel = "Infected fraction",
+         title = "Individual-based SIR/SEIR vs NetworkOutbreaks SSA")
+plot!(p, t_sir_no, μ_sir_no[:I], ribbon = σ_sir_no[:I],
+      label = "SIR (SSA)", color = :red, fillalpha = 0.18, linealpha = 0.5, lw = 1)
+plot!(p, t_seir, I_seir, label = "SEIR (IB)", lw = 2, ls = :dash, color = :orange)
+plot!(p, t_seir_no, μ_seir_no[:I], ribbon = σ_seir_no[:I],
+      label = "SEIR (SSA)", color = :orange, fillalpha = 0.18, linealpha = 0.5, lw = 1)
+p
+```
+
+<div id="fig-nbm-05-no-ribbon">
+
+![](index_files/figure-commonmark/fig-nbm-05-no-ribbon-output-1.svg)
+
+Figure 1: Individual-based SIR (red) and SEIR (orange) deterministic
+curves vs NetworkOutbreaks SSA mean ± 1σ ribbons (8 host graphs × 25 SSA
+replicates, N=200, k=6, ε=1/200).
+
+</div>
