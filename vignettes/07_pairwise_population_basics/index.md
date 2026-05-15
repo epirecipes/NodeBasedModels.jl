@@ -55,7 +55,7 @@ using Plots
 >
 > **$R_0=2$ anchor.** For `regular_network(6)` with Bernoulli closure,
 > $R_0=\tau(n-2)/\gamma$. With $\gamma=0.25$, this gives
-> $\tau=2\gamma/(6-2)=0.125$ and 1% initial infection.
+> $\tau=2\gamma/(6-2)=0.125$ and 0.1% initial infection.
 
 ``` julia
 model   = sir_model()                 # τ (infection) and γ (recovery)
@@ -63,7 +63,7 @@ network = regular_network(6)          # 6-regular, no clustering (ϕ=0)
 closure = BernoulliClosure()
 psys    = generate_pairwise(model, network, closure;
                             tspan=(0.0, 200.0), N=1.0,
-                            seed_fraction = 0.01)
+                            seed_fraction = 0.001)
 ```
 
     PairwiseSystem(Model pairwise_SIR:
@@ -77,7 +77,7 @@ psys    = generate_pairwise(model, network, closure;
       ⋮
     Parameters (2): see parameters(pairwise_SIR)
       τ
-      γ, Dict{Any, Float64}(I(t) => 0.01, SS(t) => 5.880599999999999, SR(t) => 0.0, RR(t) => 0.0, S(t) => 0.99, IR(t) => 0.0, R(t) => 0.0, SI(t) => 0.059399999999999994, II(t) => 0.0006), (0.0, 200.0), Dict{Any, Float64}(), CompartmentalModel(:SIR, Compartment[Compartment(:S, false), Compartment(:I, true), Compartment(:R, false)], Transition[Transition(:S, :I, :τ, :infection), Transition(:I, :R, :γ, :spontaneous)], [:S, :I, :R], [:I], [:S]), HomogeneousNetwork(6, 0.0, 1.0), BernoulliClosure(), Dict{Symbol, Any}(:I => I(t), :R => R(t), :S => S(t)), Dict{Tuple{Symbol, Symbol}, Any}((:I, :I) => II(t), (:S, :S) => SS(t), (:I, :R) => IR(t), (:S, :I) => SI(t), (:S, :R) => SR(t), (:R, :R) => RR(t)))
+      γ, Dict{Any, Float64}(I(t) => 0.001, SS(t) => 5.9880059999999995, SR(t) => 0.0, RR(t) => 0.0, S(t) => 0.999, IR(t) => 0.0, R(t) => 0.0, SI(t) => 0.005994, II(t) => 6.0e-6), (0.0, 200.0), Dict{Any, Float64}(), CompartmentalModel(:SIR, Compartment[Compartment(:S, false), Compartment(:I, true), Compartment(:R, false)], Transition[Transition(:S, :I, :τ, :infection), Transition(:I, :R, :γ, :spontaneous)], [:S, :I, :R], [:I], [:S]), HomogeneousNetwork(6, 0.0, 1.0), BernoulliClosure(), Dict{Symbol, Any}(:I => I(t), :R => R(t), :S => S(t)), Dict{Tuple{Symbol, Symbol}, Any}((:I, :I) => II(t), (:S, :S) => SS(t), (:I, :R) => IR(t), (:S, :I) => SI(t), (:S, :R) => SR(t), (:R, :R) => RR(t)))
 
 The generator returns a `PairwiseSystem` containing the MTK `ODESystem`,
 default initial conditions, and parameter symbols.
@@ -95,12 +95,12 @@ conditions, and symbolic parameters for use by `solve_pairwise`.
 
 ## Initial conditions
 
-For a 6-regular network with $S(0) = 0.99$, $I(0) = 0.01$, $R(0) = 0$,
+For a 6-regular network with $S(0) = 0.999$, $I(0) = 0.001$, $R(0) = 0$,
 the random-mixing initial pair counts under the mixed convention are
 $[XY](0) = k \cdot p_X \cdot p_Y$ with $k = 6$:
 
 ``` julia
-S0, I0, R0 = 0.99, 0.01, 0.0
+S0, I0, R0 = 0.999, 0.001, 0.0
 k = 6.0
 ic = copy(psys.u0)
 ic[psys.singles[:S]] = S0
@@ -158,8 +158,8 @@ println("S(∞) ≈ ", sol[psys.singles[:S]][end])
 println("R(∞) ≈ ", sol[psys.singles[:R]][end])
 ```
 
-    S(∞) ≈ 0.16228792867984682
-    R(∞) ≈ 0.837712071320156
+    S(∞) ≈ 0.16553888440596176
+    R(∞) ≈ 0.8344611155940331
 
 For $\tau=0.125$, $\gamma=0.25$, $k=6$, the pair-approximation R₀ is
 $\tau(n-2)/\gamma = 2$, matching the cross-scenario anchor.

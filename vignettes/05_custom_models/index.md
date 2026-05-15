@@ -127,7 +127,7 @@ sis_result = generate_individual_based(sis_model(), net;
     initial_infected=[1],
     tspan=(0.0, 150.0),
     saveat=0.5,
-    ε=0.01
+    ε=0.001
 )
 ```
 
@@ -201,7 +201,7 @@ sirv_result = generate_individual_based(sirv, net;
     initial_infected=[1],
     tspan=(0.0, 100.0),
     saveat=0.5,
-    ε=0.01
+    ε=0.001
 )
 ```
 
@@ -250,7 +250,7 @@ seir_result = generate_individual_based(seir_model(), net;
     initial_infected=[1],
     tspan=(0.0, 100.0),
     saveat=0.5,
-    ε=0.01
+    ε=0.001
 )
 ```
 
@@ -286,7 +286,7 @@ sir_result = generate_individual_based(sir_model(), net;
     initial_infected=[1],
     tspan=(0.0, 100.0),
     saveat=0.5,
-    ε=0.01
+    ε=0.001
 )
 I_sir = aggregate(sir_result, :I)
 t_sir = range(0.0, 100.0, length=length(I_sir))
@@ -344,7 +344,7 @@ sir2_result = generate_individual_based(sir2, net;
     initial_infected=[1],
     tspan=(0.0, 100.0),
     saveat=0.5,
-    ε=0.01
+    ε=0.001
 )
 ```
 

@@ -41,7 +41,7 @@ function final_size(ϕ; closure = KeelingClosure(), τ = τ_anchor, γ = γ_anch
     net = regular_network(n_degree; ϕ = ϕ)
     psys = generate_pairwise(sir_model(), net, closure;
                              tspan = (0.0, 400.0), N = 1.0,
-                             seed_fraction = 0.01)
+                             seed_fraction = 0.001)
     p = copy(psys.params); p[:τ] = τ; p[:γ] = γ
     sol  = solve_pairwise(psys, p; reltol = 1e-8, abstol = 1e-10)
     return sol[psys.singles[:R]][end]
@@ -54,19 +54,25 @@ nothing
 ```
 
     ┌ Warning: Verbosity toggle: dt_epsilon 
-    │  At t= 202.91609674997423, dt was forced below floating point epsilon 2.842170943040401e-14, and step error estimate = 36.010998976985505. Aborting. There is either an error in your model specification or the true solution is unstable (or the true solution can not be represented in the precision of Float64.
+    │  At t= 222.42797698248017, dt was forced below floating point epsilon 2.842170943040401e-14, and step error estimate = 4.7140138816350974e7. Aborting. There is either an error in your model specification or the true solution is unstable (or the true solution can not be represented in the precision of Float64.
     └ @ SciMLBase ~/.julia/packages/SciMLBase/hLfdZ/src/integrator_interface.jl:735
     ┌ Warning: Verbosity toggle: dt_epsilon 
-    │  At t= 212.8749677201975, dt was forced below floating point epsilon 2.842170943040401e-14, and step error estimate = 1.673207685914774e8. Aborting. There is either an error in your model specification or the true solution is unstable (or the true solution can not be represented in the precision of Float64.
+    │  At t= 274.31968015028826, dt was forced below floating point epsilon 5.684341886080802e-14, and step error estimate = 31.794870274998438. Aborting. There is either an error in your model specification or the true solution is unstable (or the true solution can not be represented in the precision of Float64.
     └ @ SciMLBase ~/.julia/packages/SciMLBase/hLfdZ/src/integrator_interface.jl:735
     ┌ Warning: Verbosity toggle: dt_epsilon 
-    │  At t= 218.05313473600603, dt was forced below floating point epsilon 2.842170943040401e-14, and step error estimate = 1.5831897442136682. Aborting. There is either an error in your model specification or the true solution is unstable (or the true solution can not be represented in the precision of Float64.
+    │  At t= 299.93435130737225, dt was forced below floating point epsilon 5.684341886080802e-14, and step error estimate = 204.16331075945033. Aborting. There is either an error in your model specification or the true solution is unstable (or the true solution can not be represented in the precision of Float64.
     └ @ SciMLBase ~/.julia/packages/SciMLBase/hLfdZ/src/integrator_interface.jl:735
     ┌ Warning: Verbosity toggle: dt_epsilon 
-    │  At t= 242.97520750312415, dt was forced below floating point epsilon 2.842170943040401e-14, and step error estimate = 1.675154322469408. Aborting. There is either an error in your model specification or the true solution is unstable (or the true solution can not be represented in the precision of Float64.
+    │  At t= 243.47560686210005, dt was forced below floating point epsilon 2.842170943040401e-14, and step error estimate = 46.684096383301124. Aborting. There is either an error in your model specification or the true solution is unstable (or the true solution can not be represented in the precision of Float64.
     └ @ SciMLBase ~/.julia/packages/SciMLBase/hLfdZ/src/integrator_interface.jl:735
     ┌ Warning: Verbosity toggle: dt_epsilon 
-    │  At t= 388.5428844451844, dt was forced below floating point epsilon 5.684341886080802e-14, and step error estimate = 11.035257442363903. Aborting. There is either an error in your model specification or the true solution is unstable (or the true solution can not be represented in the precision of Float64.
+    │  At t= 314.47924788575347, dt was forced below floating point epsilon 5.684341886080802e-14, and step error estimate = 1.1761887902235985e8. Aborting. There is either an error in your model specification or the true solution is unstable (or the true solution can not be represented in the precision of Float64.
+    └ @ SciMLBase ~/.julia/packages/SciMLBase/hLfdZ/src/integrator_interface.jl:735
+    ┌ Warning: Verbosity toggle: dt_epsilon 
+    │  At t= 327.78105028582127, dt was forced below floating point epsilon 5.684341886080802e-14, and step error estimate = 13.35399704742999. Aborting. There is either an error in your model specification or the true solution is unstable (or the true solution can not be represented in the precision of Float64.
+    └ @ SciMLBase ~/.julia/packages/SciMLBase/hLfdZ/src/integrator_interface.jl:735
+    ┌ Warning: Verbosity toggle: dt_epsilon 
+    │  At t= 358.99625901884724, dt was forced below floating point epsilon 5.684341886080802e-14, and step error estimate = 8602.109780133893. Aborting. There is either an error in your model specification or the true solution is unstable (or the true solution can not be represented in the precision of Float64.
     └ @ SciMLBase ~/.julia/packages/SciMLBase/hLfdZ/src/integrator_interface.jl:735
 
 ``` julia

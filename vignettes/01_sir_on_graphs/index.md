@@ -53,7 +53,10 @@ using Random
 ## Create a graph
 
 We build a random regular graph with $N = 100$ nodes and degree $k = 6$.
-Every node has exactly 6 neighbours.
+Every node has exactly 6 neighbours. *(This vignette is an exception to
+the canonical $\varepsilon = 0.001$ convention: per-node ODE/SSA size
+makes $N = 1000$ intractable, so we keep $N = 100$ with a single seed,
+which is $\varepsilon = 0.01$.)*
 
 > [!NOTE]
 >
@@ -108,7 +111,7 @@ ib_result = generate_individual_based(
 
 S_ib = aggregate(ib_result, :S)
 I_ib = aggregate(ib_result, :I)
-R_ib = 100.0 .- S_ib .- I_ib
+R_ib = N .- S_ib .- I_ib
 t_ib = range(0.0, tmax, length = length(S_ib))
 
 p = plot(t_ib, S_ib, label = "S (individual)", lw = 2, color = :blue,
@@ -145,7 +148,7 @@ pb_result = generate_pair_based(
 
 S_pb = aggregate(pb_result, :S)
 I_pb = aggregate(pb_result, :I)
-R_pb = 100.0 .- S_pb .- I_pb
+R_pb = N .- S_pb .- I_pb
 t_pb = range(0.0, tmax, length = length(S_pb))
 ```
 

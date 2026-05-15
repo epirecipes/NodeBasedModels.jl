@@ -55,7 +55,7 @@ the regime where standard pairwise fails most visibly. The
 disease-process parameters use the canonical anchor $\gamma = 0.25$ with
 $R_0 = 2$ via the homogeneous pairwise formula $R_0 = \tau(k-2)/\gamma$
 for $k = 3$, giving $\tau = 0.5$. Initial prevalence
-$\varepsilon = 0.01$ matches the canonical $S(0) = 990,\, I(0) = 10$ on
+$\varepsilon = 0.001$ matches the canonical $S(0) = 999,\, I(0) = 1$ on
 $N = 1{,}000$.
 
 ``` julia
@@ -77,7 +77,7 @@ Multiple Gillespie SIS runs give us the mean prevalence trajectory
 together with a 5–95 % envelope.
 
 ``` julia
-n_initial = 10
+n_initial = 1
 avg = gillespie_sis_average(net;
                               nruns = 60,
                               dt = 0.5,

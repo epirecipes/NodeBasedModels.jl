@@ -34,7 +34,7 @@ by `NodeBasedModels.jl` on one common benchmark:
     3-regular host.
 
 The disease is SIS on a $k = 3$ regular graph with $\beta = 0.5$,
-$\gamma = 0.25$, $N = 1000$, initial prevalence $\epsilon = 0.01$, and
+$\gamma = 0.25$, $N = 1000$, initial prevalence $\epsilon = 0.001$, and
 horizon $t_{\max} = 120$. These derive from the canonical SIR parameters
 ($\gamma = 0.25$, anchored to $R_0 = 2$ via the homogeneous pairwise
 formula $R_0 = \tau(k-2)/\gamma$ for $k = 3$).
@@ -65,7 +65,7 @@ Markdown.
 >
 > **$R_0=2$ anchor.** This homogeneous $k=3$ SIS benchmark uses the
 > NodeBasedModels pairwise formula $R_0=\tau(k-2)/\gamma$. With
-> $\gamma=0.25$, this gives $\tau=0.5$ and 1% initial infection.
+> $\gamma=0.25$, this gives $\tau=0.5$ and 0.1% initial infection.
 
 ``` julia
 N        = 1_000
@@ -73,7 +73,7 @@ k        = 3
 γ_val    = 0.25
 R0_target = 2.0
 β_val    = R0_target * γ_val / (k - 2)  # homogeneous pairwise anchor
-ε_val    = 0.01
+ε_val    = 0.001
 tmax     = 120.0
 ensemble = 48
 save_dt  = 1.0
@@ -130,7 +130,7 @@ gill_sd   = vec(std(run_prev; dims = 1))
         tmax, gill_prev[end], gill_sd[end], ensemble)
 ```
 
-    Gillespie mean at t=120.0: 0.81846 ± 0.01438 (1σ, n=48)
+    Gillespie mean at t=120.0: 0.66537 ± 0.32323 (1σ, n=48)
 
 ## Four ODE integrations
 
@@ -146,26 +146,26 @@ I_pair    = sol_pair[psys_pair.singles[:I]]
 ```
 
     121-element Vector{Float64}:
-     0.01
-     0.023230379896092092
-     0.04091090457319238
-     0.06730779538628143
-     0.1074645292486584
-     0.1670520897662165
-     0.2507487836959342
-     0.3585348767837066
-     0.48109973485059493
-     0.5994073581877432
+     0.001
+     0.0023513547506366665
+     0.004202671262553979
+     0.007068247743313306
+     0.011680504839787227
+     0.01916687881181149
+     0.0312808567488591
+     0.05068892745517869
+     0.08124298055754366
+     0.1279934252822362
      ⋮
-     0.8181818181818182
+     0.8181818181818163
+     0.8181818181818159
+     0.8181818181818157
+     0.8181818181818161
+     0.8181818181818171
      0.8181818181818185
-     0.8181818181818182
-     0.8181818181818181
-     0.8181818181818179
-     0.8181818181818178
-     0.818181818181818
-     0.8181818181818181
-     0.8181818181818181
+     0.8181818181818186
+     0.8181818181818183
+     0.8181818181818183
 
 ### 2. Reinfection counting: $L = 1$
 
@@ -186,26 +186,26 @@ I_re    = reinfection_totals(psys_re, sol_re)[:I]
 ```
 
     121-element Vector{Float64}:
-     0.01
-     0.0231882771585825
-     0.04014534331168273
-     0.06348110900584053
-     0.09577373356975352
-     0.139716747943424
-     0.19772492243183887
-     0.2710401688386217
-     0.35841731019452044
-     0.4549037421119854
+     0.001
+     0.0023469930050885376
+     0.00412120884266688
+     0.006643951974050554
+     0.010299948859094714
+     0.015613877055042141
+     0.023318342275568903
+     0.03443061497074143
+     0.05033481260764127
+     0.07284856959780397
      ⋮
-     0.8181818181818138
-     0.8181818181818139
+     0.8181818181818197
+     0.8181818181818185
+     0.8181818181818172
+     0.8181818181818161
+     0.8181818181818151
+     0.8181818181818145
      0.8181818181818143
-     0.8181818181818153
-     0.8181818181818163
+     0.818181818181815
      0.8181818181818165
-     0.8181818181818163
-     0.8181818181818162
-     0.8181818181818163
 
 ### 3. Motif closure: $m = 3$
 
@@ -232,26 +232,26 @@ I_motif   = [u[iI_motif] / N for u in sol_motif.u]
 ```
 
     121-element Vector{Float64}:
-     0.01
-     0.023194206765105915
-     0.04031783808008257
-     0.0644912306590342
-     0.09923987612545633
-     0.14854146310458355
-     0.21594760092670387
-     0.3026541702506041
-     0.40487172819789946
-     0.5123511850681991
+     0.001
+     0.002347641690097081
+     0.004140479980610093
+     0.006761981071790539
+     0.01073238068914441
+     0.016825988508803
+     0.02619835813843668
+     0.04054325187428707
+     0.0622572528911603
+     0.09452730692380676
      ⋮
+     0.8162801123637109
+     0.8162801123637162
+     0.8162801123637204
+     0.8162801123637239
+     0.8162801123637263
      0.8162801123637278
-     0.8162801123637289
-     0.8162801123637293
-     0.8162801123637292
-     0.8162801123637287
-     0.8162801123637279
-     0.8162801123637269
-     0.8162801123637261
-     0.8162801123637256
+     0.8162801123637284
+     0.8162801123637283
+     0.816280112363728
 
 ### 4. Neighbourhood closure: $n = 2$
 
@@ -265,26 +265,26 @@ I_nbr   = neighbourhood_compartment(sys_nbr, sol_nbr, :I)
 ```
 
     121-element Vector{Float64}:
-     0.01
-     0.023196223638221682
-     0.04023851308048399
-     0.06384666982502725
-     0.0968258744898807
-     0.14228565930026962
-     0.20315327340767572
-     0.2809895273596011
-     0.37419971092605103
-     0.4764196364530713
+     0.001
+     0.0023478407179252105
+     0.004131554021532878
+     0.006686603574440681
+     0.0104303266980972
+     0.015958945807962397
+     0.024136110859177624
+     0.03619588874115324
+     0.053855635860975797
+     0.07940450287760471
      ⋮
-     0.8173494495082438
-     0.8173494495082436
-     0.8173494495082434
-     0.8173494495082432
-     0.817349449508243
-     0.8173494495082427
-     0.8173494495082426
-     0.8173494495082426
-     0.8173494495082425
+     0.8173494495082461
+     0.8173494495082462
+     0.8173494495082461
+     0.8173494495082461
+     0.8173494495082458
+     0.8173494495082458
+     0.8173494495082458
+     0.8173494495082457
+     0.8173494495082456
 
 All ODE outputs are saved on the same grid as the Gillespie ensemble.
 
@@ -362,11 +362,11 @@ display(Markdown.parse(join(lines, "\n")))
 
 | Method | Endpoint I/N | Signed deviation | Absolute deviation |
 |---:|---:|---:|---:|
-| Gillespie mean | 0.81846 | +0.00000 | 0.00000 |
-| Standard pairwise (Keeling) | 0.81818 | -0.00028 | 0.00028 |
-| Reinfection counting L=1 | 0.81818 | -0.00028 | 0.00028 |
-| Motif m=3 | 0.81628 | -0.00218 | 0.00218 |
-| Neighbourhood n=2 | 0.81735 | -0.00111 | 0.00111 |
+| Gillespie mean | 0.66537 | +0.00000 | 0.00000 |
+| Standard pairwise (Keeling) | 0.81818 | +0.15281 | 0.15281 |
+| Reinfection counting L=1 | 0.81818 | +0.15281 | 0.15281 |
+| Motif m=3 | 0.81628 | +0.15091 | 0.15091 |
+| Neighbourhood n=2 | 0.81735 | +0.15197 | 0.15197 |
 
 At this parameter point, all four deterministic approximations lie well
 inside the endpoint sampling spread of the 48-run Gillespie ensemble
@@ -407,9 +407,9 @@ display(Markdown.parse(join(lines, "\n")))
 
 |                           Comparison | Max absolute difference | Time of max |
 |-------------------------------------:|------------------------:|------------:|
-| standard pairwise vs reinfection L=1 |                 0.14450 |         9.0 |
-|  standard pairwise vs Gillespie mean |                 0.15074 |         9.0 |
-|    reinfection L=1 vs Gillespie mean |                 0.01140 |        12.0 |
+| standard pairwise vs reinfection L=1 |                 0.27878 |        14.0 |
+|  standard pairwise vs Gillespie mean |                 0.31686 |        15.0 |
+|    reinfection L=1 vs Gillespie mean |                 0.15991 |        66.0 |
 
 ## Honest framing
 
@@ -438,7 +438,7 @@ unfinished implementation work.
 
 - Host graph seed: `StableRNG(20240301)`.
 - Gillespie ensemble: 48 runs, seeds `20240302:20240349`.
-- Initial infected set: `collect(1:10)` (1% of `N = 1000`).
+- Initial infected set: `collect(1:1)` (0.1% of `N = 1000`).
 - ODE solver tolerances: package defaults, currently `reltol = 1e-8` and
   `abstol = 1e-10` for `solve_pairwise`, `solve_motif`, and
   `solve_neighbourhood`.
