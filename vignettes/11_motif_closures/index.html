@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Simon Frost">
-<meta name="dcterms.date" content="2026-05-14">
+<meta name="dcterms.date" content="2026-05-15">
 
 <title>Motif Closures and the Marginalisation Obstruction</title>
 <style>
@@ -2386,7 +2386,7 @@ window.Quarto = {
   <ul class="collapse">
   <li><a href="#reading-list" id="toc-reading-list" class="nav-link" data-scroll-target="#reading-list">Reading list</a></li>
   </ul></li>
-  <li><a href="#networkoutbreaks-ssa-ribbon" id="toc-networkoutbreaks-ssa-ribbon" class="nav-link" data-scroll-target="#networkoutbreaks-ssa-ribbon">NetworkOutbreaks SSA ribbon</a></li>
+  <li><a href="#simulation-validation" id="toc-simulation-validation" class="nav-link" data-scroll-target="#simulation-validation">Simulation validation</a></li>
   </ul>
 <div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="index.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li><li><a href="index.md"><i class="bi bi-file-code"></i>Github (GFM)</a></li></ul></div></nav>
 </div>
@@ -2412,7 +2412,7 @@ window.Quarto = {
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">May 14, 2026</p>
+      <p class="date">May 15, 2026</p>
     </div>
   </div>
   
@@ -3062,8 +3062,8 @@ No F₃ can be a function of M u alone.</code></pre>
 </ul>
 </section>
 </section>
-<section id="networkoutbreaks-ssa-ribbon" class="level2">
-<h2 class="anchored" data-anchor-id="networkoutbreaks-ssa-ribbon">NetworkOutbreaks SSA ribbon</h2>
+<section id="simulation-validation" class="level2">
+<h2 class="anchored" data-anchor-id="simulation-validation">Simulation validation</h2>
 <p>For a uniform stochastic ground-truth across the package suite we use <a href="https://github.com/sdwfrost/NetworkOutbreaks.jl"><code>NetworkOutbreaks.jl</code></a>’s Gillespie SSA. Where the deterministic prediction in this vignette already sits inside the SSA mean ± 1σ ribbon — see vignette <a href="../01_sir_on_graphs/index.html"><code>01_sir_on_graphs</code></a> for the canonical overlay pattern — we omit the redundant ribbon here for clarity.</p>
 <p>A future revision will inline a per-vignette NO ribbon for each scenario; the shared helper is exposed as <code>vignettes/_validation.jl#gillespie_ribbon</code> and applied in vignette 01.</p>
 </section>

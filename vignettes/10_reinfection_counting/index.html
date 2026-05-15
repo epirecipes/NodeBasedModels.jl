@@ -7,7 +7,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
 <meta name="author" content="Simon Frost">
-<meta name="dcterms.date" content="2026-05-14">
+<meta name="dcterms.date" content="2026-05-15">
 
 <title>Reinfection Counting for SIS on Networks</title>
 <style>
@@ -2372,7 +2372,7 @@ window.Quarto = {
   <li><a href="#distribution-of-past-infections" id="toc-distribution-of-past-infections" class="nav-link" data-scroll-target="#distribution-of-past-infections">Distribution of past infections</a></li>
   <li><a href="#when-does-this-help" id="toc-when-does-this-help" class="nav-link" data-scroll-target="#when-does-this-help">When does this help?</a></li>
   <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references">References</a></li>
-  <li><a href="#networkoutbreaks-ssa-ribbon" id="toc-networkoutbreaks-ssa-ribbon" class="nav-link" data-scroll-target="#networkoutbreaks-ssa-ribbon">NetworkOutbreaks SSA ribbon</a></li>
+  <li><a href="#simulation-validation" id="toc-simulation-validation" class="nav-link" data-scroll-target="#simulation-validation">Simulation validation</a></li>
   </ul>
 <div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="index.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li><li><a href="index.md"><i class="bi bi-file-code"></i>Github (GFM)</a></li></ul></div></nav>
 </div>
@@ -2398,7 +2398,7 @@ window.Quarto = {
     <div>
     <div class="quarto-title-meta-heading">Published</div>
     <div class="quarto-title-meta-contents">
-      <p class="date">May 14, 2026</p>
+      <p class="date">May 15, 2026</p>
     </div>
   </div>
   
@@ -2562,8 +2562,8 @@ window.Quarto = {
 <li>Keeling, M. J., House, T., Cooper, A. J., &amp; Pellis, L. (2016). Systematic approximations to susceptible-infectious-susceptible dynamics on networks. <em>PLoS Computational Biology</em>, 12(12), e1005296. <a href="https://doi.org/10.1371/journal.pcbi.1005296">doi:10.1371/journal.pcbi.1005296</a></li>
 </ul>
 </section>
-<section id="networkoutbreaks-ssa-ribbon" class="level2">
-<h2 class="anchored" data-anchor-id="networkoutbreaks-ssa-ribbon">NetworkOutbreaks SSA ribbon</h2>
+<section id="simulation-validation" class="level2">
+<h2 class="anchored" data-anchor-id="simulation-validation">Simulation validation</h2>
 <p>For a uniform stochastic ground-truth across the package suite we use <a href="https://github.com/sdwfrost/NetworkOutbreaks.jl"><code>NetworkOutbreaks.jl</code></a>’s Gillespie SSA. Where the deterministic prediction in this vignette already sits inside the SSA mean ± 1σ ribbon — see vignette <a href="../01_sir_on_graphs/index.html"><code>01_sir_on_graphs</code></a> for the canonical overlay pattern — we omit the redundant ribbon here for clarity.</p>
 <p>A future revision will inline a per-vignette NO ribbon for each scenario; the shared helper is exposed as <code>vignettes/_validation.jl#gillespie_ribbon</code> and applied in vignette 01.</p>
 </section>

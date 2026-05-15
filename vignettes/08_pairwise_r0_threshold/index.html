@@ -2371,7 +2371,7 @@ window.Quarto = {
   <li><a href="#threshold-sweep" id="toc-threshold-sweep" class="nav-link" data-scroll-target="#threshold-sweep">Threshold sweep</a></li>
   <li><a href="#early-growth" id="toc-early-growth" class="nav-link" data-scroll-target="#early-growth">Early growth</a></li>
   <li><a href="#summary" id="toc-summary" class="nav-link" data-scroll-target="#summary">Summary</a></li>
-  <li><a href="#networkoutbreaks-ssa-ribbon" id="toc-networkoutbreaks-ssa-ribbon" class="nav-link" data-scroll-target="#networkoutbreaks-ssa-ribbon">NetworkOutbreaks SSA ribbon</a></li>
+  <li><a href="#simulation-validation" id="toc-simulation-validation" class="nav-link" data-scroll-target="#simulation-validation">Simulation validation</a></li>
   </ul>
 <div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="index.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li><li><a href="index.md"><i class="bi bi-file-code"></i>Github (GFM)</a></li></ul></div></nav>
 </div>
@@ -2511,8 +2511,8 @@ Keeling,   n=6, ϕ=0.4 → R₀ = 6.72</code></pre>
 <h2 class="anchored" data-anchor-id="summary">Summary</h2>
 <p><code>basic_reproduction_number</code> returns numeric or symbolic <span class="math inline">\(R_0\)</span> for any model–network–closure triple; the threshold <span class="math inline">\(R_0 = 1\)</span> separates die-out from outbreak in the pair system.</p>
 </section>
-<section id="networkoutbreaks-ssa-ribbon" class="level2">
-<h2 class="anchored" data-anchor-id="networkoutbreaks-ssa-ribbon">NetworkOutbreaks SSA ribbon</h2>
+<section id="simulation-validation" class="level2">
+<h2 class="anchored" data-anchor-id="simulation-validation">Simulation validation</h2>
 <p>We overlay the <a href="https://github.com/sdwfrost/NetworkOutbreaks.jl"><code>NetworkOutbreaks.jl</code></a> Gillespie SSA on the early-growth trajectory (<span class="math inline">\(\tau = 0.2\)</span>, <span class="math inline">\(\gamma = 0.1\)</span>, 6-regular host graph). At small times the SSA-mean prevalence grows exponentially with the same rate <span class="math inline">\((R_0 - 1)\gamma\)</span> predicted by the pair-approximation.</p>
 <div id="14" class="cell" data-execution_count="1">
 <div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb8"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a><span class="fu">include</span>(<span class="st">&quot;../_validation.jl&quot;</span>)</span>

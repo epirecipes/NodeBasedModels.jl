@@ -6,8 +6,10 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
+<meta name="author" content="Simon Frost">
+<meta name="dcterms.date" content="2026-05-15">
 
-<title>index</title>
+<title>Motif Shapes and State-Class Catalogue</title>
 <style>
 
 code{white-space: pre-wrap;}
@@ -2346,9 +2348,7 @@ window.Quarto = {
     <h2 id="toc-title">Table of contents</h2>
    
   <ul>
-  <li><a href="#motif-shapes-and-state-class-catalogue" id="toc-motif-shapes-and-state-class-catalogue" class="nav-link active" data-scroll-target="#motif-shapes-and-state-class-catalogue">Motif Shapes and State-Class Catalogue</a>
-  <ul class="collapse">
-  <li><a href="#introduction" id="toc-introduction" class="nav-link" data-scroll-target="#introduction">Introduction</a></li>
+  <li><a href="#introduction" id="toc-introduction" class="nav-link active" data-scroll-target="#introduction">Introduction</a></li>
   <li><a href="#setup" id="toc-setup" class="nav-link" data-scroll-target="#setup">Setup</a></li>
   <li><a href="#counting-convention" id="toc-counting-convention" class="nav-link" data-scroll-target="#counting-convention">Counting convention</a></li>
   <li><a href="#catalogue-generation" id="toc-catalogue-generation" class="nav-link" data-scroll-target="#catalogue-generation">Catalogue generation</a></li>
@@ -2356,30 +2356,44 @@ window.Quarto = {
   <li><a href="#shape-diagrams" id="toc-shape-diagrams" class="nav-link" data-scroll-target="#shape-diagrams">Shape diagrams</a></li>
   <li><a href="#notes-on-the-lean-certified-obstruction-at-k3-m4" id="toc-notes-on-the-lean-certified-obstruction-at-k3-m4" class="nav-link" data-scroll-target="#notes-on-the-lean-certified-obstruction-at-k3-m4">Notes on the Lean-certified obstruction at (k=3, m=4)</a></li>
   <li><a href="#references" id="toc-references" class="nav-link" data-scroll-target="#references">References</a></li>
-  <li><a href="#networkoutbreaks-ssa-ribbon" id="toc-networkoutbreaks-ssa-ribbon" class="nav-link" data-scroll-target="#networkoutbreaks-ssa-ribbon">NetworkOutbreaks SSA ribbon</a></li>
-  </ul></li>
+  <li><a href="#simulation-validation" id="toc-simulation-validation" class="nav-link" data-scroll-target="#simulation-validation">Simulation validation</a></li>
   </ul>
-<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="index.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li><li><a href="index-gfm.md"><i class="bi bi-file-code"></i>Github (GFM)</a></li></ul></div></nav>
+<div class="quarto-alternate-formats"><h2>Other Formats</h2><ul><li><a href="index.pdf"><i class="bi bi-file-pdf"></i>PDF</a></li><li><a href="index.md"><i class="bi bi-file-code"></i>Github (GFM)</a></li></ul></div></nav>
 </div>
 <main class="content" id="quarto-document-content">
 
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Motif Shapes and State-Class Catalogue</h1>
+<p class="subtitle lead">NodeBasedModels.jl Vignette 14 — Reference catalogue for (k,m) shape tables</p>
+</div>
 
 
 
-<section id="motif-shapes-and-state-class-catalogue" class="level1">
-<h1>Motif Shapes and State-Class Catalogue</h1>
-<p>Simon Frost 2026-05-14</p>
-<ul>
-<li><a href="#introduction">Introduction</a></li>
-<li><a href="#setup">Setup</a></li>
-<li><a href="#counting-convention">Counting convention</a></li>
-<li><a href="#catalogue-generation">Catalogue generation</a></li>
-<li><a href="#variable-count-summary">Variable-count summary</a></li>
-<li><a href="#shape-diagrams">Shape diagrams</a></li>
-<li><a href="#notes-on-the-lean-certified-obstruction-at-k3-m4">Notes on the Lean-certified obstruction at (k=3, m=4)</a></li>
-<li><a href="#references">References</a></li>
-<li><a href="#networkoutbreaks-ssa-ribbon">NetworkOutbreaks SSA ribbon</a></li>
-</ul>
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Author</div>
+    <div class="quarto-title-meta-contents">
+             <p>Simon Frost </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Published</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">May 15, 2026</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
 <section id="introduction" class="level2">
 <h2 class="anchored" data-anchor-id="introduction">Introduction</h2>
 <p>The motif/subgraph-closure framework of <a href="https://doi.org/10.1371/journal.pcbi.1005296">Keeling, House, Cooper &amp; Pellis (2016)</a> tracks, for each connected <span class="math inline">\(m\)</span>-vertex induced subgraph <em>shape</em> <span class="math inline">\(H\)</span> of the host network and each canonical state assignment <span class="math inline">\(\sigma\)</span> of <span class="math inline">\(H\)</span>’s vertices, the count <span class="math inline">\(E_{H,\sigma}(t)\)</span> of such induced copies in the current state. Two embeddings are identified if one is sent to the other by a graph automorphism of <span class="math inline">\(H\)</span>; this reduces the state space from <span class="math inline">\(|Q|^m \times |\text{Emb}(H,G)|\)</span> to a manageable set of orbit representatives.</p>
@@ -2388,12 +2402,16 @@ window.Quarto = {
 </section>
 <section id="setup" class="level2">
 <h2 class="anchored" data-anchor-id="setup">Setup</h2>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">NodeBasedModels</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div id="2" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb1"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="im">using</span> <span class="bu">NodeBasedModels</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
 </section>
 <section id="counting-convention" class="level2">
 <h2 class="anchored" data-anchor-id="counting-convention">Counting convention</h2>
 <p>Variables count <strong>unordered induced embeddings</strong> of a shape <span class="math inline">\(H\)</span> partitioned by canonical state class under <span class="math inline">\(\mathrm{Aut}(H)\)</span>. Conversion to the “directed-pair” or “labelled” counts used in the standard Keeling pairwise convention multiplies by the orbit size <span class="math inline">\(|\mathrm{orb}(\sigma)|\)</span>:</p>
-<p><span class="math display">\[L_\sigma = E_{\mathrm{canon}(\sigma)} \cdot |\mathrm{orb}(\sigma)|,\]</span></p>
+<p><span class="math display">\[
+L_\sigma = E_{\mathrm{canon}(\sigma)} \cdot |\mathrm{orb}(\sigma)|,
+\]</span></p>
 <p>where <span class="math inline">\(|\mathrm{orb}(\sigma)| = |\mathrm{Aut}(H)| / |\mathrm{Stab}(\sigma)|\)</span>.</p>
 <p>For the <span class="math inline">\(P_2\)</span> shape (<span class="math inline">\(|\mathrm{Aut}|=2\)</span>):</p>
 <table class="caption-top table">
@@ -2425,7 +2443,8 @@ window.Quarto = {
 </section>
 <section id="catalogue-generation" class="level2">
 <h2 class="anchored" data-anchor-id="catalogue-generation">Catalogue generation</h2>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> <span class="fu">fmt_state</span>(st)</span>
+<div id="4" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb2"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="kw">function</span> <span class="fu">fmt_state</span>(st)</span>
 <span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>    <span class="fu">join</span>(<span class="fu">string</span>.(st), <span class="st">&quot;,&quot;</span>)</span>
 <span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">end</span></span>
 <span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a></span>
@@ -2475,6 +2494,7 @@ window.Quarto = {
 <span id="cb2-48"><a href="#cb2-48" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>()</span>
 <span id="cb2-49"><a href="#cb2-49" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">&quot;  Total variables for (k=</span><span class="sc">$</span>k<span class="st">, m=</span><span class="sc">$</span>m<span class="st">): </span><span class="sc">$</span>total_vars<span class="st">&quot;</span>)</span>
 <span id="cb2-50"><a href="#cb2-50" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
 <pre><code>============================================================
 (k=2, m=2)  —  2 shape(s)
 ============================================================
@@ -2899,10 +2919,13 @@ window.Quarto = {
   └─────────────────────┴────────────┘
 
   Total variables for (k=3, m=4): 65</code></pre>
+</div>
+</div>
 </section>
 <section id="variable-count-summary" class="level2">
 <h2 class="anchored" data-anchor-id="variable-count-summary">Variable-count summary</h2>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">&quot;| (k,m) | Shapes tracked                          | State classes | Variables |&quot;</span>)</span>
+<div id="6" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb4"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">&quot;| (k,m) | Shapes tracked                          | State classes | Variables |&quot;</span>)</span>
 <span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="fu">println</span>(<span class="st">&quot;|-------|----------------------------------------|--------------|-----------|&quot;</span>)</span>
 <span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> (k, m) <span class="kw">in</span> [(<span class="fl">2</span>,<span class="fl">2</span>),(<span class="fl">2</span>,<span class="fl">3</span>),(<span class="fl">2</span>,<span class="fl">4</span>),(<span class="fl">2</span>,<span class="fl">5</span>),(<span class="fl">2</span>,<span class="fl">6</span>),(<span class="fl">3</span>,<span class="fl">2</span>),(<span class="fl">3</span>,<span class="fl">3</span>),(<span class="fl">3</span>,<span class="fl">4</span>)]</span>
 <span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    closure <span class="op">=</span> <span class="fu">MotifClosure</span>(k, m)</span>
@@ -2913,6 +2936,7 @@ window.Quarto = {
 <span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>    nclass  <span class="op">=</span> nvars</span>
 <span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">&quot;| (k=</span><span class="sc">$</span>k<span class="st">,m=</span><span class="sc">$</span>m<span class="st">) | </span><span class="sc">$</span>(<span class="fu">rpad</span>(names,<span class="fl">38</span>))<span class="st"> | </span><span class="sc">$</span>(<span class="fu">lpad</span>(nclass,<span class="fl">12</span>))<span class="st"> | </span><span class="sc">$</span>(<span class="fu">lpad</span>(nvars,<span class="fl">9</span>))<span class="st"> |&quot;</span>)</span>
 <span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
 <pre><code>| (k,m) | Shapes tracked                          | State classes | Variables |
 |-------|----------------------------------------|--------------|-----------|
 | (k=2,m=2) | :singleton + :P2                       |            5 |         5 |
@@ -2923,14 +2947,18 @@ window.Quarto = {
 | (k=3,m=2) | :singleton + :P2                       |            5 |         5 |
 | (k=3,m=3) | :singleton + :P2 + :P3 + :C3           |           15 |        15 |
 | (k=3,m=4) | :singleton + :P2 + :P3 + :C3 + :P4 + :K13 + :paw + :C4 + :K4me + :K4 |           65 |        65 |</code></pre>
+</div>
+</div>
 </section>
 <section id="shape-diagrams" class="level2">
 <h2 class="anchored" data-anchor-id="shape-diagrams">Shape diagrams</h2>
-<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb6"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>all_names <span class="op">=</span> [<span class="op">:</span>singleton, <span class="op">:</span>P2, <span class="op">:</span>P3, <span class="op">:</span>C3, <span class="op">:</span>P4, <span class="op">:</span>K13, <span class="op">:</span>paw, <span class="op">:</span>C4, <span class="op">:</span>K4me, <span class="op">:</span>K4]</span>
+<div id="8" class="cell" data-execution_count="1">
+<div class="code-copy-outer-scaffold"><div class="sourceCode cell-code" id="cb6"><pre class="sourceCode julia code-with-copy"><code class="sourceCode julia"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>all_names <span class="op">=</span> [<span class="op">:</span>singleton, <span class="op">:</span>P2, <span class="op">:</span>P3, <span class="op">:</span>C3, <span class="op">:</span>P4, <span class="op">:</span>K13, <span class="op">:</span>paw, <span class="op">:</span>C4, <span class="op">:</span>K4me, <span class="op">:</span>K4]</span>
 <span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a><span class="cf">for</span> nm <span class="kw">in</span> all_names</span>
 <span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>(<span class="st">&quot;</span><span class="sc">$</span>(<span class="fu">rpad</span>(<span class="fu">string</span>(nm),<span class="fl">10</span>))<span class="st">  </span><span class="sc">$</span>(<span class="fu">shape_ascii</span>(nm))<span class="st">&quot;</span>)</span>
 <span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">println</span>()</span>
 <span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a><span class="cf">end</span></span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></div>
+<div class="cell-output cell-output-stdout">
 <pre><code>singleton   ●
 
 P2          ●─●
@@ -2960,7 +2988,10 @@ K4me        ●─●
 
 K4          ●─●
  │╳│
- ●─●</code></pre>
+ ●─●
+</code></pre>
+</div>
+</div>
 </section>
 <section id="notes-on-the-lean-certified-obstruction-at-k3-m4" class="level2">
 <h2 class="anchored" data-anchor-id="notes-on-the-lean-certified-obstruction-at-k3-m4">Notes on the Lean-certified obstruction at (k=3, m=4)</h2>
@@ -2976,11 +3007,10 @@ K4          ●─●
 <li>Kirkwood J.G. (1935). Statistical mechanics of fluid mixtures. <em>J. Chem. Phys.</em> 3:300–313.</li>
 </ul>
 </section>
-<section id="networkoutbreaks-ssa-ribbon" class="level2">
-<h2 class="anchored" data-anchor-id="networkoutbreaks-ssa-ribbon">NetworkOutbreaks SSA ribbon</h2>
+<section id="simulation-validation" class="level2">
+<h2 class="anchored" data-anchor-id="simulation-validation">Simulation validation</h2>
 <p>For a uniform stochastic ground-truth across the package suite we use <a href="https://github.com/sdwfrost/NetworkOutbreaks.jl"><code>NetworkOutbreaks.jl</code></a>’s Gillespie SSA. Where the deterministic prediction in this vignette already sits inside the SSA mean ± 1σ ribbon — see vignette <a href="../01_sir_on_graphs/index.html"><code>01_sir_on_graphs</code></a> for the canonical overlay pattern — we omit the redundant ribbon here for clarity.</p>
 <p>A future revision will inline a per-vignette NO ribbon for each scenario; the shared helper is exposed as <code>vignettes/_validation.jl#gillespie_ribbon</code> and applied in vignette 01.</p>
-</section>
 </section>
 
 </main>
