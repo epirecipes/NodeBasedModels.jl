@@ -64,11 +64,12 @@ p
 
 ## Pair-based dynamics on each topology
 
-We run the pair-based (order-2) model on each graph with the same epidemiological parameters.
+We run the pair-based (order-2) model on each graph with the same epidemiological parameters. On a $k$-regular graph with mean degree 6, $R_0 = (k-1)\,T$ where $T = \tau/(\tau+\gamma)$. For $R_0 = 2$: $T = 2/5$, $\tau = T\gamma/(1-T) = 1/6$.
 
 ```{julia}
-τ = 0.125
+T_val = 2.0 / 5.0                         # R₀ = (k-1)T = 2 for k=6
 γ = 0.25
+τ = T_val * γ / (1 - T_val)               # 1/6 ≈ 0.1667
 
 pb_reg = generate_pair_based(sir_model(), net_reg;
     infection_rate = τ, recovery_rate = γ,
@@ -216,53 +217,78 @@ Network structure controls three key quantities:
 
 ## Simulation validation
 
-We overlay the
-[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)
-Gillespie SSA on each topology to confirm that the pair-based prediction
-sits inside the stochastic ensemble. Because $N = 200$ is small here,
-each ribbon is averaged over multiple graph realisations from the same
-family. The seed fraction is matched to the deterministic single-node
-seed ($\varepsilon = 1/200 = 0.005$).
+We validate each topology against Gillespie SSA from
+[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl).
+For each topology, both pair-based and SSA use the same $\tau = 1/6$
+($R_0 = 2$ on regular $k = 6$), $\gamma = 0.25$, and $\varepsilon = 0.05$
+(5 % initial seed to suppress die-outs). Each panel shows one topology.
 
 ```{julia}
 include("../_validation.jl")
 
 N_v = 200
-ε_v = 1 / N_v
+ε_v = 0.05
 prog_no = sir_model(τ = :β)
 params_no = Dict(:β => τ, :γ => γ)
 
-t_reg, μ_reg, σ_reg = gillespie_ribbon(prog_no, params_no,
-    regular_graph_builder(N_v, 6);
-    N = N_v, n_graphs = 6, nsims_per_graph = 20,
-    tspan = (0.0, 40.0), seed_fraction = ε_v, major_outbreak_thresh = 0.2)
-t_er, μ_er, σ_er = gillespie_ribbon(prog_no, params_no,
+# --- Regular ---
+pb_reg_v = generate_pair_based(sir_model(), net_reg;
+    infection_rate = τ, recovery_rate = γ,
+    tspan = (0.0, 40.0), saveat = 0.5, ε = ε_v)
+I_reg_v = aggregate(pb_reg_v, :I)
+t_reg_v = range(0.0, 40.0; length = length(I_reg_v))
+
+fixed_reg = rng -> random_regular_graph(N_v, 6; seed = 123)
+t_ssa_reg, μ_ssa_reg, σ_ssa_reg = gillespie_ribbon(prog_no, params_no,
+    fixed_reg;
+    N = N_v, n_graphs = 1, nsims_per_graph = 200,
+    tspan = (0.0, 40.0), seed_fraction = ε_v,
+    tgrid = collect(0.0:0.5:40.0))
+
+# --- Erdős–Rényi ---
+pb_er_v = generate_pair_based(sir_model(), net_er;
+    infection_rate = τ, recovery_rate = γ,
+    tspan = (0.0, 40.0), saveat = 0.5, ε = ε_v)
+I_er_v = aggregate(pb_er_v, :I)
+t_er_v = range(0.0, 40.0; length = length(I_er_v))
+
+t_ssa_er, μ_ssa_er, σ_ssa_er = gillespie_ribbon(prog_no, params_no,
     poisson_graph_builder(N_v, 6.0);
-    N = N_v, n_graphs = 6, nsims_per_graph = 20,
-    tspan = (0.0, 40.0), seed_fraction = ε_v, major_outbreak_thresh = 0.2)
-t_ba, μ_ba, σ_ba = gillespie_ribbon(prog_no, params_no,
+    N = N_v, n_graphs = 5, nsims_per_graph = 40,
+    tspan = (0.0, 40.0), seed_fraction = ε_v,
+    tgrid = collect(0.0:0.5:40.0))
+
+# --- Barabási–Albert ---
+pb_ba_v = generate_pair_based(sir_model(), net_ba;
+    infection_rate = τ, recovery_rate = γ,
+    tspan = (0.0, 40.0), saveat = 0.5, ε = ε_v)
+I_ba_v = aggregate(pb_ba_v, :I)
+t_ba_v = range(0.0, 40.0; length = length(I_ba_v))
+
+t_ssa_ba, μ_ssa_ba, σ_ssa_ba = gillespie_ribbon(prog_no, params_no,
     barabasi_albert_graph_builder(N_v, 3);
-    N = N_v, n_graphs = 6, nsims_per_graph = 20,
-    tspan = (0.0, 40.0), seed_fraction = ε_v, major_outbreak_thresh = 0.2)
+    N = N_v, n_graphs = 5, nsims_per_graph = 40,
+    tspan = (0.0, 40.0), seed_fraction = ε_v,
+    tgrid = collect(0.0:0.5:40.0))
 ```
 
 ```{julia}
-#| label: fig-nbm-02-no-ribbon
-#| fig-cap: "Pair-based deterministic predictions (lines) vs NetworkOutbreaks SSA mean ± 1σ ribbons (shaded). Each ribbon averages 6 graph realisations × 20 stochastic runs at N=200, ε=1/200."
-p = plot(t, I_reg, label = "Regular (PB)", lw = 2, color = :blue,
-         xlabel = "Time", ylabel = "Number infected",
-         title = "Pair-based vs NetworkOutbreaks SSA across topologies")
-plot!(p, t_reg, μ_reg[:I] .* N_v, ribbon = σ_reg[:I] .* N_v,
-      label = "Regular (SSA)", color = :blue,
-      fillalpha = 0.2, linealpha = 0.5, lw = 1)
-plot!(p, t, I_er, label = "Erdős–Rényi (PB)", lw = 2, color = :orange)
-plot!(p, t_er, μ_er[:I] .* N_v, ribbon = σ_er[:I] .* N_v,
-      label = "Erdős–Rényi (SSA)", color = :orange,
-      fillalpha = 0.2, linealpha = 0.5, lw = 1)
-plot!(p, range(0.0, 40.0, length = length(I_ba)), I_ba,
-      label = "Barabási–Albert (PB)", lw = 2, color = :purple)
-plot!(p, t_ba, μ_ba[:I] .* N_v, ribbon = σ_ba[:I] .* N_v,
-      label = "Barabási–Albert (SSA)", color = :purple,
-      fillalpha = 0.2, linealpha = 0.5, lw = 1)
-p
+#| label: fig-nbm-02-validation
+#| fig-cap: "Pair-based (lines) vs SSA mean ± 1σ (ribbons) for each topology (N=200, R₀=2, 5% seed). Regular and ER: PB on one graph, SSA on matching random graphs. BA: PB on one graph, SSA across 5 BA realisations."
+p1 = plot(t_reg_v, I_reg_v, lw = 2, color = :blue, label = "PB",
+          ylabel = "Infected", title = "Regular (k=6)")
+plot!(p1, t_ssa_reg, μ_ssa_reg[:I] .* N_v, ribbon = σ_ssa_reg[:I] .* N_v,
+      color = :blue, fillalpha = 0.2, linealpha = 0.4, lw = 1, label = "SSA")
+
+p2 = plot(t_er_v, I_er_v, lw = 2, color = :orange, label = "PB",
+          title = "Erdős–Rényi (⟨k⟩≈6)")
+plot!(p2, t_ssa_er, μ_ssa_er[:I] .* N_v, ribbon = σ_ssa_er[:I] .* N_v,
+      color = :orange, fillalpha = 0.2, linealpha = 0.4, lw = 1, label = "SSA")
+
+p3 = plot(t_ba_v, I_ba_v, lw = 2, color = :purple, label = "PB",
+          xlabel = "Time", ylabel = "Infected", title = "Barabási–Albert (m=3)")
+plot!(p3, t_ssa_ba, μ_ssa_ba[:I] .* N_v, ribbon = σ_ssa_ba[:I] .* N_v,
+      color = :purple, fillalpha = 0.2, linealpha = 0.4, lw = 1, label = "SSA")
+
+plot(p1, p2, p3, layout = (1, 3), size = (900, 300))
 ```
