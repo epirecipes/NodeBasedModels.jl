@@ -37,7 +37,9 @@ using Plots
 ## Building the system
 
 ::: {.callout-note}
-**$R_0=2$ anchor.** For `regular_network(6)` with Bernoulli closure, $R_0=\tau(n-2)/\gamma$. With $\gamma=0.25$, this gives $\tau=2\gamma/(6-2)=0.125$ and 0.1% initial infection.
+**$R_0=2$ anchor.** On a $k$-regular graph, $R_0 = (k-1)\,T$ where
+$T = \tau/(\tau+\gamma)$. With $k=6$ and $\gamma=0.25$:
+$T = 2/5$, $\tau = T\gamma/(1-T) = 1/6$; 1 % initial seed.
 :::
 
 ```{julia}
@@ -78,7 +80,7 @@ ic[psys.pairs[(:R,:R)]] = k * R0 * R0
 
 p = copy(psys.params)
 p[:γ] = 0.25
-p[:τ] = 2.0 * p[:γ] / (k - 2)
+T_val = 2.0 / (k - 1); p[:τ] = T_val * p[:γ] / (1 - T_val)
 ```
 
 ## Solving
@@ -115,7 +117,7 @@ println("S(∞) ≈ ", sol[psys.singles[:S]][end])
 println("R(∞) ≈ ", sol[psys.singles[:R]][end])
 ```
 
-For $\tau=0.125$, $\gamma=0.25$, $k=6$, the pair-approximation R₀ is $\tau(n-2)/\gamma = 2$, matching the cross-scenario anchor.
+With $T = 2/5$, $\tau = 1/6$, $\gamma = 0.25$, $k = 6$: $R_0 = (k-1)T = 2$.
 
 ## Summary
 
@@ -123,29 +125,27 @@ For $\tau=0.125$, $\gamma=0.25$, $k=6$, the pair-approximation R₀ is $\tau(n-2
 
 ## Simulation validation
 
-We overlay the
-[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)
-Gillespie SSA on the pair-approximation. The host graphs are 6-regular
-on $N = 1000$ nodes (matching the population-level pair model's $k = 6$),
-and the seed fraction matches the deterministic $\varepsilon = 0.001$.
+We validate the population-level pair-approximation against Gillespie
+SSA on 6-regular graphs ($N = 1000$), with $\tau = 1/6$, $\gamma = 0.25$
+($R_0 = (k-1)T = 2$), and $\varepsilon = 0.01$.
 
 ```{julia}
 include("../_validation.jl")
 
 N_v = 1000
 prog_no = sir_model(τ = :β)
-params_no = Dict(:β => 0.125, :γ => 0.25)
+params_no = Dict(:β => 1/6, :γ => 0.25)
 
 t_no, μ_no, σ_no = gillespie_ribbon(prog_no, params_no,
     regular_graph_builder(N_v, 6);
-    N = N_v, n_graphs = 5, nsims_per_graph = 20,
-    tspan = (0.0, 200.0), seed_fraction = 0.01, major_outbreak_thresh = 0.2,
-    tgrid = collect(0.0:1.0:200.0))
+    N = N_v, n_graphs = 5, nsims_per_graph = 40,
+    tspan = (0.0, 80.0), seed_fraction = 0.01,
+    tgrid = collect(0.0:0.5:80.0))
 ```
 
 ```{julia}
-#| label: fig-nbm-07-no-ribbon
-#| fig-cap: "Pair-approximation singles (lines) vs NetworkOutbreaks SSA mean ± 1σ ribbons (5 host graphs × 20 SSA replicates, N=1000, k=6, ε=0.01)."
+#| label: fig-nbm-06-no-ribbon
+#| fig-cap: "Pair-approximation (lines) vs NetworkOutbreaks SSA mean ± 1σ ribbons (5 graphs × 40 SSA replicates, N=1000, k=6, R₀=2, ε=0.01)."
 p = plot(sol.t, sol[psys.singles[:S]], label = "S (PA)", lw = 2, color = :blue,
          xlabel = "time", ylabel = "fraction",
          title = "Pair-approximation vs NetworkOutbreaks SSA")
