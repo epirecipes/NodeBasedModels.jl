@@ -34,9 +34,10 @@ using Random
 We build a random regular graph with $N = 100$ nodes and degree $k = 6$. Every node has exactly 6 neighbours. *(This vignette is an exception to the canonical $\varepsilon = 0.001$ convention: per-node ODE/SSA size makes $N = 1000$ intractable, so we keep $N = 100$ with a single seed, which is $\varepsilon = 0.01$.)*
 
 ::: {.callout-note}
-**$R_0=2$ anchor.** On a $k$-regular graph the branching-process
-$R_0 = \tau(k-1)/\gamma$. With $k=6$ and $\gamma=0.25$,
-$\tau = 2\gamma/(k-1) = 0.1$.
+**$R_0=2$ anchor.** On a $k$-regular graph with per-edge rate $\tau$ and
+recovery rate $\gamma$, the per-edge transmissibility is
+$T = \tau/(\tau+\gamma)$ and $R_0 = (k-1)T$. With $k=6$ and
+$\gamma=0.25$: $T = 2/5$, $\tau = T\gamma/(1-T) = 1/6$.
 :::
 
 ```{julia}
@@ -45,7 +46,8 @@ N = 100
 k = 6
 γ_val = 0.25
 R0_target = 2.0
-τ_val = R0_target * γ_val / (k - 1)
+T_val = R0_target / (k - 1)              # T = R₀/(k-1) = 0.4
+τ_val = T_val * γ_val / (1 - T_val)      # τ = Tγ/(1-T) = 1/6
 initial_seed = [1]
 tmax = 40.0
 g = random_regular_graph(N, k)
@@ -126,37 +128,46 @@ p
 
 ## Simulation validation
 
-We validate the pair-based (order-2) and individual-based (order-1)
-closures against Gillespie SSA from
-[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)
-on the same $k = 6$ regular graph topology ($N = 100$). We seed 5 %
-of nodes ($\varepsilon = 0.05$) to suppress stochastic die-outs,
-and use $\tau = R_0\gamma/(k-1) = 0.1$ ($R_0 = 2$), $\gamma = 0.25$.
+Each closure level has its own $R_0$ formula on a $k$-regular graph.
+To compare *timing and shape* differences fairly, we calibrate each
+model to $R_0 = 2$ under its own threshold formula. The SSA and
+pair-based share the same $R_0 = (k-1)T$ where $T=\tau/(\tau+\gamma)$
+is the per-edge transmissibility (probability of transmission before
+recovery on a single edge):
+
+| Closure | $R_0$ formula | $\tau$ for $R_0=2$ |
+|---------|--------------|-------------------|
+| NIMFA (order-1) | $\tau k / \gamma$ | $2\gamma/k \approx 0.083$ |
+| Kirkwood (order-2) / SSA | $(k-1)\,\tau/(\tau+\gamma)$ | $2\gamma/(k-3) = 1/6$ |
+
+We seed 5 % of nodes ($\varepsilon = 0.05$) to suppress stochastic
+die-outs; $\gamma = 0.25$, $k = 6$, $N = 100$.
 
 ```{julia}
 include("../_validation.jl")
 
 N_v = 100
-τ_v = R0_target * γ_val / (k - 1)   # 0.1
+τ_ib  = 2 * γ_val / k           # 0.0833 — NIMFA R₀ = τk/γ = 2
+τ_pb  = 2 * γ_val / (k - 3)     # 1/6    — pair-based R₀ = (k-1)τ/(τ+γ) = 2
 
-# Pair-based on this graph (order-2, Kirkwood closure)
-pb_val = generate_pair_based(sir_model(), net;
-    infection_rate = τ_v, recovery_rate = γ_val,
-    tspan = (0.0, tmax), saveat = 0.5, ε = 0.05)
-I_pb_v = aggregate(pb_val, :I)
-t_pb_v = range(0.0, tmax; length = length(I_pb_v))
-
-# Individual-based on the same graph (order-1, NIMFA)
+# Individual-based (order-1, NIMFA) at its own R₀=2 rate
 ib_val = generate_individual_based(sir_model(), net;
-    infection_rate = τ_v, recovery_rate = γ_val,
+    infection_rate = τ_ib, recovery_rate = γ_val,
     tspan = (0.0, tmax), saveat = 0.5, ε = 0.05)
 I_ib_v = aggregate(ib_val, :I)
 t_ib_v = range(0.0, tmax; length = length(I_ib_v))
 
-# SSA ensemble on same graph topology
+# Pair-based (order-2, Kirkwood) at its own R₀=2 rate
+pb_val = generate_pair_based(sir_model(), net;
+    infection_rate = τ_pb, recovery_rate = γ_val,
+    tspan = (0.0, tmax), saveat = 0.5, ε = 0.05)
+I_pb_v = aggregate(pb_val, :I)
+t_pb_v = range(0.0, tmax; length = length(I_pb_v))
+
+# SSA at same τ as pair-based (both use R₀ = (k-1)T = 2)
 fixed_regular = rng -> random_regular_graph(N_v, k; seed = 42)
 t_no, μ_no, σ_no = gillespie_ribbon(
-    sir_model(τ = :β), Dict(:β => τ_v, :γ => γ_val),
+    sir_model(τ = :β), Dict(:β => τ_pb, :γ => γ_val),
     fixed_regular;
     N = N_v, n_graphs = 1, nsims_per_graph = 200,
     tspan = (0.0, tmax), seed_fraction = 0.05,
@@ -165,22 +176,23 @@ t_no, μ_no, σ_no = gillespie_ribbon(
 
 ```{julia}
 #| label: fig-nbm-01-validation
-#| fig-cap: "Moment closure hierarchy on a k=6 regular graph (N=100, R₀=2, 5% seed). The pair-based (Kirkwood) closure matches the SSA mean; the individual-based (NIMFA) closure over-predicts due to ignoring pair correlations."
-p = plot(t_pb_v, I_pb_v, label = "Pair-based (order-2)", lw = 2, color = :blue,
+#| fig-cap: "Each model calibrated to R₀=2 under its own threshold formula (k=6, N=100, 5% seed). Pair-based and SSA share the same τ=1/6 (R₀=(k−1)T=2) and match closely. NIMFA uses a lower τ=1/12 (R₀=τk/γ=2) reflecting its over-counting of transmission pathways."
+p = plot(t_pb_v, I_pb_v, label = "Pair-based (τ=$(round(τ_pb;digits=4)))",
+         lw = 2, color = :blue,
          xlabel = "Time", ylabel = "Number infected",
-         title = "Moment closure hierarchy vs SSA (k=6, R₀=2)")
-plot!(p, t_ib_v, I_ib_v, label = "Individual-based (order-1)",
+         title = "Closure hierarchy at R₀=2 (each model's own τ)")
+plot!(p, t_ib_v, I_ib_v, label = "NIMFA (τ=$(round(τ_ib;digits=4)))",
       lw = 2, ls = :dash, color = :red)
 plot!(p, t_no, μ_no[:I] .* N_v, ribbon = σ_no[:I] .* N_v,
-      label = "SSA (mean ± 1σ)", color = :blue,
+      label = "SSA (τ=$(round(τ_pb;digits=4)), mean ± 1σ)", color = :blue,
       fillalpha = 0.2, linealpha = 0.4, lw = 1)
 p
 ```
 
-The pair-based curve tracks the SSA mean closely; the individual-based
-closure over-predicts the peak because the independence closure
-$\langle S_i I_j\rangle \approx \langle S_i\rangle\langle I_j\rangle$
-ignores pair correlations (see the discussion above).
+The pair-based and SSA curves match closely (both at $R_0 = (k-1)T = 2$
+with $T = \tau/(\tau+\gamma) = 0.4$). NIMFA uses a lower $\tau$ because
+it counts all $k$ edges equally ($R_0 = \tau k/\gamma$), ignoring the
+pair correlation that one edge was the infection source.
 
 The three levels of the moment closure hierarchy trade off accuracy against computational cost:
 
