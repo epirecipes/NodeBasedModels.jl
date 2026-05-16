@@ -25,12 +25,13 @@ using Plots
 γ_anchor = 0.25
 R0_target = 2.0
 n_degree = 6
-τ_anchor = R0_target * γ_anchor / (n_degree - 2)
+T_anchor = R0_target / (n_degree - 1)   # T = R₀/(k-1) = 0.4
+τ_anchor = T_anchor * γ_anchor / (1 - T_anchor)  # 1/6
 
 function final_size(ϕ; closure = KeelingClosure(), τ = τ_anchor, γ = γ_anchor)
     net = regular_network(n_degree; ϕ = ϕ)
     psys = generate_pairwise(sir_model(), net, closure;
-                             tspan = (0.0, 400.0), N = 1.0,
+                             tspan = (0.0, 80.0), N = 1.0,
                              seed_fraction = 0.01)
     p = copy(psys.params); p[:τ] = τ; p[:γ] = γ
     sol  = solve_pairwise(psys, p; reltol = 1e-8, abstol = 1e-10)
@@ -88,26 +89,26 @@ params_no = Dict(:β => τ_anchor, :γ => γ_anchor)
 
 t_no, μ_no, σ_no = gillespie_ribbon(prog_no, params_no,
     regular_graph_builder(N_v, n_degree);
-    N = N_v, n_graphs = 5, nsims_per_graph = 25,
-    tspan = (0.0, 200.0), seed_fraction = 0.01, major_outbreak_thresh = 0.2,
-    tgrid = collect(0.0:1.0:200.0))
+    N = N_v, n_graphs = 5, nsims_per_graph = 40,
+    tspan = (0.0, 40.0), seed_fraction = 0.01,
+    tgrid = collect(0.0:0.5:40.0))
 ```
 
 ```{julia}
-#| label: fig-nbm-09-no-ribbon
-#| fig-cap: "Pair-approximation [I](t) at the unclustered (ϕ=0) baseline (line) vs NetworkOutbreaks SSA mean ± 1σ ribbon (5 host graphs × 25 SSA replicates, N=1000, k=6, ε=0.01)."
+#| label: fig-nbm-08-no-ribbon
+#| fig-cap: "Pair-approximation I(t) at ϕ=0 baseline (line) vs SSA mean ± 1σ ribbon (5 graphs × 40 replicates, N=1000, k=6, R₀=2, ε=0.01)."
 psys_un  = generate_pairwise(sir_model(), regular_network(n_degree, ϕ = 0.0),
                               BernoulliClosure();
-                              tspan = (0.0, 200.0), N = 1.0, seed_fraction = 0.01)
+                              tspan = (0.0, 40.0), N = 1.0, seed_fraction = 0.01)
 p_un     = copy(psys_un.params); p_un[:τ] = τ_anchor; p_un[:γ] = γ_anchor
 sol_un   = solve_pairwise(psys_un, p_un; reltol = 1e-8, abstol = 1e-10)
 
 p = plot(sol_un.t, sol_un[psys_un.singles[:I]],
-         label = "[I] (PA, ϕ=0)", lw = 2, color = :red,
-         xlabel = "time", ylabel = "fraction infected",
-         title = "Pair-approximation vs NetworkOutbreaks SSA (unclustered)")
+         label = "I (PA, ϕ=0)", lw = 2, color = :red,
+         xlabel = "Time", ylabel = "Fraction infected",
+         title = "Pair-approximation vs SSA (unclustered, R₀=2)")
 plot!(p, t_no, μ_no[:I], ribbon = σ_no[:I],
-      label = "I (SSA mean ± 1σ)", color = :darkred,
-      fillalpha = 0.18, linealpha = 0.5, lw = 1)
+      label = "I (SSA mean ± 1σ)", color = :red,
+      fillalpha = 0.2, linealpha = 0.4, lw = 1)
 p
 ```

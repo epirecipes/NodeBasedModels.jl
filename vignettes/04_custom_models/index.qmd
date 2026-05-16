@@ -62,7 +62,7 @@ println("Graph: N=$(nv(g)), E=$(ne(g)), mean_degree=$(mean_degree(net))")
 
 ```{julia}
 sis_result = generate_individual_based(sis_model(), net;
-    infection_rate=0.125,
+    infection_rate=1/6,
     recovery_rate=0.25,
     initial_infected=[1],
     tspan=(0.0, 150.0),
@@ -116,7 +116,7 @@ The model has two spontaneous transitions ($I \to R$ and $S \to V$). In the curr
 
 ```{julia}
 sirv_result = generate_individual_based(sirv, net;
-    infection_rate=0.125,
+    infection_rate=1/6,
     recovery_rate=0.25,
     initial_infected=[1],
     tspan=(0.0, 100.0),
@@ -156,7 +156,7 @@ Individuals in $E$ are infected but not yet infectious. This delays the epidemic
 
 ```{julia}
 seir_result = generate_individual_based(seir_model(), net;
-    infection_rate=0.125,
+    infection_rate=1/6,
     recovery_rate=0.25,
     initial_infected=[1],
     tspan=(0.0, 100.0),
@@ -186,7 +186,7 @@ Compare the SIR and SEIR epidemic curves to see the delay and reduction caused b
 
 ```{julia}
 sir_result = generate_individual_based(sir_model(), net;
-    infection_rate=0.125,
+    infection_rate=1/6,
     recovery_rate=0.25,
     initial_infected=[1],
     tspan=(0.0, 100.0),
@@ -233,7 +233,7 @@ Both $I_1$ and $I_2$ are infectious (they can transmit), but only individuals in
 
 ```{julia}
 sir2_result = generate_individual_based(sir2, net;
-    infection_rate=0.125,
+    infection_rate=1/6,
     recovery_rate=0.25,
     initial_infected=[1],
     tspan=(0.0, 100.0),
@@ -305,7 +305,8 @@ include("../_validation.jl")
 
 N_v = 200
 γ_v = 0.25
-τ_v = 2.0 * γ_v / (6 - 1)   # 0.1  →  R₀ = τ(k-1)/γ = 2
+T_v = 2.0 / (6 - 1)   # T = R₀/(k-1) = 0.4
+τ_v = T_v * γ_v / (1 - T_v)    # τ = Tγ/(1-T) = 1/6
 
 pb = generate_pair_based(sir_model(), net;
     infection_rate = τ_v, recovery_rate = γ_v,
