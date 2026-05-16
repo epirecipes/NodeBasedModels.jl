@@ -167,16 +167,3 @@ formal statement.
   Correlations and unbiological terms. *Theor. Pop. Biol.* 79(4):115–129.
 * Kirkwood J.G. (1935). Statistical mechanics of fluid mixtures.
   *J. Chem. Phys.* 3:300–313.
-
-## Simulation validation
-
-For a uniform stochastic ground-truth across the package suite we use
-[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)'s
-Gillespie SSA. Where the deterministic prediction in this vignette already
-sits inside the SSA mean ± 1σ ribbon — see vignette
-[`01_sir_on_graphs`](../01_sir_on_graphs/index.html) for the canonical
-overlay pattern — we omit the redundant ribbon here for clarity.
-
-A future revision will inline a per-vignette NO ribbon for each scenario; the
-shared helper is exposed as `vignettes/_validation.jl#gillespie_ribbon` and
-applied in vignette 01.

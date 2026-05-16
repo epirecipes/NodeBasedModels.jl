@@ -763,13 +763,8 @@ entirely by living in a different formal category.
 
 ## Simulation validation
 
-For a uniform stochastic ground-truth across the package suite we use
-[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)'s
-Gillespie SSA. Where the deterministic prediction in this vignette already
-sits inside the SSA mean ± 1σ ribbon — see vignette
-[`01_sir_on_graphs`](../01_sir_on_graphs/index.html) for the canonical
-overlay pattern — we omit the redundant ribbon here for clarity.
-
-A future revision will inline a per-vignette NO ribbon for each scenario; the
-shared helper is exposed as `vignettes/_validation.jl#gillespie_ribbon` and
-applied in vignette 01.
+The Gillespie SSA ensemble computed in the main body of this
+vignette serves as the stochastic ground truth. The per-panel
+comparison plots above overlay each deterministic closure against
+the SSA mean ± 1σ ribbon, confirming that the ODE predictions
+track the stochastic dynamics at the endemic equilibrium.
