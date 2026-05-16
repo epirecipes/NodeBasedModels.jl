@@ -79,6 +79,65 @@ regular_graph_builder(N::Int, k::Int) =
 barabasi_albert_graph_builder(N::Int, k_add::Int) =
     rng -> barabasi_albert(N, k_add; rng = rng)
 
+"""
+    clustered_regular_graph_builder(N, k, ϕ_target; max_iters=50_000)
+
+Build a k-regular graph with approximately `ϕ_target` clustering coefficient
+via triangle-forming degree-preserving edge swaps.
+
+Algorithm: start from `random_regular_graph(N, k)` (ϕ≈0), then repeatedly
+pick two edges (a,b) and (a,c) sharing node a, and attempt to close a
+triangle by swapping (b,d)→(b,c) for some d, preserving all degrees.
+If the swap would increase clustering toward the target, accept it.
+"""
+function clustered_regular_graph_builder(N::Int, k::Int, ϕ_target::Real;
+                                          max_iters::Int = 50_000)
+    return function (rng)
+        g = random_regular_graph(N, k; rng = rng)
+        ϕ_target <= 0 && return g
+        _clustering_rewire!(g, ϕ_target, max_iters, rng)
+        return g
+    end
+end
+
+function _clustering_rewire!(g::SimpleGraph, ϕ_target::Real,
+                              max_iters::Int, rng::AbstractRNG)
+    E = collect(edges(g))
+    for _ in 1:max_iters
+        global_cc = Graphs.global_clustering_coefficient(g)
+        global_cc >= ϕ_target && break
+
+        # Pick a random edge (u, v)
+        e1 = E[rand(rng, 1:length(E))]
+        u, v = src(e1), dst(e1)
+
+        # Pick another random edge (w, x) where w is a neighbor of u but not v
+        u_nbrs = neighbors(g, u)
+        length(u_nbrs) < 2 && continue
+        w = u_nbrs[rand(rng, 1:length(u_nbrs))]
+        w == v && continue
+        has_edge(g, v, w) && continue   # triangle already exists
+
+        w_nbrs = neighbors(g, w)
+        # Find a neighbor x of w that is not u, not v, and not already connected to v
+        candidates = [x for x in w_nbrs if x != u && x != v && !has_edge(g, v, x)]
+        isempty(candidates) && continue
+        x = candidates[rand(rng, 1:length(candidates))]
+
+        # Swap: remove (v,u) and (w,x), add (v,w) and (u,x)
+        # Check that (u,x) doesn't already exist
+        has_edge(g, u, x) && continue
+
+        rem_edge!(g, u, v)
+        rem_edge!(g, w, x)
+        add_edge!(g, v, w)
+        add_edge!(g, u, x)
+
+        # Update edge list
+        E = collect(edges(g))
+    end
+end
+
 # ---------------------------------------------------------------------------
 # Maximum Mean Discrepancy (MMD) — kernel two-sample test for trajectories
 # Mirrors the EdgeBasedModels.jl/vignettes/_validation.jl machinery so that
