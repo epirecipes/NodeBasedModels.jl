@@ -34,7 +34,9 @@ using Random
 We build a random regular graph with $N = 100$ nodes and degree $k = 6$. Every node has exactly 6 neighbours. *(This vignette is an exception to the canonical $\varepsilon = 0.001$ convention: per-node ODE/SSA size makes $N = 1000$ intractable, so we keep $N = 100$ with a single seed, which is $\varepsilon = 0.01$.)*
 
 ::: {.callout-note}
-**$R_0=2$ anchor.** For the homogeneous pairwise anchor, $R_0=\tau(k-2)/\gamma$. With $k=6$ and $\gamma=0.25$, the comparable per-edge/pair rate is $\tau=0.125$, and 1% seeding corresponds to one initial node.
+**$R_0=2$ anchor.** On a $k$-regular graph the branching-process
+$R_0 = \tau(k-1)/\gamma$. With $k=6$ and $\gamma=0.25$,
+$\tau = 2\gamma/(k-1) = 0.1$.
 :::
 
 ```{julia}
@@ -43,7 +45,7 @@ N = 100
 k = 6
 γ_val = 0.25
 R0_target = 2.0
-τ_val = R0_target * γ_val / (k - 2)
+τ_val = R0_target * γ_val / (k - 1)
 initial_seed = [1]
 tmax = 40.0
 g = random_regular_graph(N, k)
@@ -122,80 +124,63 @@ plot!(p, t_pb, I_pb, label = "I (pair-based)", lw = 2, color = :darkred)
 p
 ```
 
-## Gillespie validation
+## Simulation validation
 
-The Gillespie algorithm simulates the exact continuous-time Markov chain. We run 50 realisations and compute the mean trajectory together with a 90% confidence interval (5th–95th percentile envelope).
-
-```{julia}
-gill_avg = gillespie_sir_average(
-    net;
-    nruns          = 50,
-    dt             = 0.5,
-    tmax_grid      = tmax,
-    infection_rate = τ_val,
-    recovery_rate  = γ_val,
-    initial_infected = initial_seed
-)
-```
-
-```{julia}
-p = plot(t_ib, I_ib, label = "Individual-based (order-1)", lw = 2, ls = :dash, color = :red,
-         xlabel = "Time", ylabel = "Number infected",
-         title = "Moment closure hierarchy — SIR on 6-regular graph")
-plot!(p, t_pb, I_pb, label = "Pair-based (order-2)", lw = 2, color = :darkred)
-plot!(p, gill_avg.t_grid, gill_avg.I_mean, label = "Gillespie mean (n=50)",
-      lw = 2, color = :black)
-plot!(p, gill_avg.t_grid, gill_avg.I_mean,
-      ribbon = (gill_avg.I_mean .- gill_avg.I_q05, gill_avg.I_q95 .- gill_avg.I_mean),
-      fillalpha = 0.18, linealpha = 0.0, color = :black, label = "Gillespie 90% CI")
-p
-```
-
-The plot illustrates the characteristic ordering of the hierarchy:
-
-$$
-\text{Individual-based} \;\ge\; \text{Pair-based} \;\ge\; \text{Gillespie mean}.
-$$
-
-The individual-based model over-estimates the epidemic because the pairwise independence assumption ignores **dynamical correlations**: if node $i$ infected node $j$, then $j$ is less likely to re-infect $i$ because $i$ is probably still infected. This "2-cycle" effect is captured by the pair-based model.
-
-## Discussion
-
-### NetworkOutbreaks ribbon
-
-To standardise across the package suite we also overlay the
+We validate the pair-based (order-2) and individual-based (order-1)
+closures against Gillespie SSA from
 [`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)
-Gillespie SSA (used as the canonical ground truth in EBM and NO vignettes).
-At $N=100$ this is on the small side for a smooth ribbon — we average across
-several graph realisations to reduce conditioning on a single graph.
+on the same $k = 6$ regular graph topology ($N = 100$). We seed 5 %
+of nodes ($\varepsilon = 0.05$) to suppress stochastic die-outs,
+and use $\tau = R_0\gamma/(k-1) = 0.1$ ($R_0 = 2$), $\gamma = 0.25$.
 
 ```{julia}
 include("../_validation.jl")
 
+N_v = 100
+τ_v = R0_target * γ_val / (k - 1)   # 0.1
+
+# Pair-based on this graph (order-2, Kirkwood closure)
+pb_val = generate_pair_based(sir_model(), net;
+    infection_rate = τ_v, recovery_rate = γ_val,
+    tspan = (0.0, tmax), saveat = 0.5, ε = 0.05)
+I_pb_v = aggregate(pb_val, :I)
+t_pb_v = range(0.0, tmax; length = length(I_pb_v))
+
+# Individual-based on the same graph (order-1, NIMFA)
+ib_val = generate_individual_based(sir_model(), net;
+    infection_rate = τ_v, recovery_rate = γ_val,
+    tspan = (0.0, tmax), saveat = 0.5, ε = 0.05)
+I_ib_v = aggregate(ib_val, :I)
+t_ib_v = range(0.0, tmax; length = length(I_ib_v))
+
+# SSA ensemble on same graph topology
+fixed_regular = rng -> random_regular_graph(N_v, k; seed = 42)
 t_no, μ_no, σ_no = gillespie_ribbon(
-    sir_model(τ = :β),                        # NBM model → NO adapter
-    Dict(:β => τ_val, :γ => γ_val),
-    regular_graph_builder(N, k);
-    N = N, n_graphs = 5, nsims_per_graph = 20,
-    tspan = (0.0, tmax), seed_fraction = length(initial_seed) / N)
+    sir_model(τ = :β), Dict(:β => τ_v, :γ => γ_val),
+    fixed_regular;
+    N = N_v, n_graphs = 1, nsims_per_graph = 200,
+    tspan = (0.0, tmax), seed_fraction = 0.05,
+    tgrid = collect(0.0:0.5:tmax))
 ```
 
 ```{julia}
-#| label: fig-no-validation-01
-#| fig-cap: "NetworkOutbreaks SSA ribbon (matched per-closure colors) over the order-1 and order-2 closures."
-plot(t_no, μ_no[:I] .* N, ribbon = σ_no[:I] .* N,
-     label = "NO SSA (mean ± 1σ)", color = :darkred, fillalpha = 0.18, linealpha = 0.5)
-plot!(t_ib, I_ib, label = "Order-1 individual-based",
+#| label: fig-nbm-01-validation
+#| fig-cap: "Moment closure hierarchy on a k=6 regular graph (N=100, R₀=2, 5% seed). The pair-based (Kirkwood) closure matches the SSA mean; the individual-based (NIMFA) closure over-predicts due to ignoring pair correlations."
+p = plot(t_pb_v, I_pb_v, label = "Pair-based (order-2)", lw = 2, color = :blue,
+         xlabel = "Time", ylabel = "Number infected",
+         title = "Moment closure hierarchy vs SSA (k=6, R₀=2)")
+plot!(p, t_ib_v, I_ib_v, label = "Individual-based (order-1)",
       lw = 2, ls = :dash, color = :red)
-plot!(t_pb, I_pb, label = "Order-2 pair-based",
-      lw = 2, color = :darkred)
-xlabel!("Time"); ylabel!("Number infected")
-title!("NodeBasedModels closures vs NetworkOutbreaks SSA")
+plot!(p, t_no, μ_no[:I] .* N_v, ribbon = σ_no[:I] .* N_v,
+      label = "SSA (mean ± 1σ)", color = :blue,
+      fillalpha = 0.2, linealpha = 0.4, lw = 1)
+p
 ```
 
-The pair-based closure tracks the SSA ribbon mean closely; the individual-
-based closure systematically over-predicts the peak, illustrating the
-moment-closure ordering numerically.
+The pair-based curve tracks the SSA mean closely; the individual-based
+closure over-predicts the peak because the independence closure
+$\langle S_i I_j\rangle \approx \langle S_i\rangle\langle I_j\rangle$
+ignores pair correlations (see the discussion above).
 
 The three levels of the moment closure hierarchy trade off accuracy against computational cost:
 
