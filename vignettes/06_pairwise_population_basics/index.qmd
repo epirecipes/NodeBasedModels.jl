@@ -47,7 +47,7 @@ model   = sir_model()                 # τ (infection) and γ (recovery)
 network = regular_network(6)          # 6-regular, no clustering (ϕ=0)
 closure = BernoulliClosure()
 psys    = generate_pairwise(model, network, closure;
-                            tspan=(0.0, 200.0), N=1.0,
+                            tspan=(0.0, 40.0), N=1.0,
                             seed_fraction = 0.01)
 ```
 
@@ -139,8 +139,8 @@ params_no = Dict(:β => 1/6, :γ => 0.25)
 t_no, μ_no, σ_no = gillespie_ribbon(prog_no, params_no,
     regular_graph_builder(N_v, 6);
     N = N_v, n_graphs = 5, nsims_per_graph = 40,
-    tspan = (0.0, 80.0), seed_fraction = 0.01,
-    tgrid = collect(0.0:0.5:80.0))
+    tspan = (0.0, 40.0), seed_fraction = 0.01,
+    tgrid = collect(0.0:0.5:40.0))
 ```
 
 ```{julia}
