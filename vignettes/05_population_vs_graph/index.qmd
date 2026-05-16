@@ -2,7 +2,7 @@
 title: "Population-Level vs Graph-Instance Models"
 author: "Simon Frost"
 date: today
-subtitle: "NodeBasedModels.jl Vignette 06"
+subtitle: "NodeBasedModels.jl Vignette 05"
 ---
 
 ## Introduction

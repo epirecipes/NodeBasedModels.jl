@@ -2,7 +2,7 @@
 title: "SIR on a Network: Pair-Approximation Basics"
 author: "Simon Frost"
 date: today
-subtitle: "NodeBasedModels.jl Vignette 07 (population pairwise basics)"
+subtitle: "NodeBasedModels.jl Vignette 06 (population pairwise basics)"
 ---
 
 ## Introduction

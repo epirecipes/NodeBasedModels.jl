@@ -2,7 +2,7 @@
 title: "Reinfection Counting for SIS on Networks"
 author: "Simon Frost"
 date: today
-subtitle: "NodeBasedModels.jl Vignette 10 (Keeling et al. 2016 reinfection counting)"
+subtitle: "NodeBasedModels.jl Vignette 09 (Keeling et al. 2016 reinfection counting)"
 ---
 
 ## Introduction

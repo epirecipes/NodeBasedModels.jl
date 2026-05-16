@@ -2,7 +2,7 @@
 title: "Custom Compartmental Models"
 author: "Simon Frost"
 date: today
-subtitle: "NodeBasedModels.jl Vignette 05"
+subtitle: "NodeBasedModels.jl Vignette 04"
 ---
 
 ## Introduction

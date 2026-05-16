@@ -2,7 +2,7 @@
 title: "Neighbourhood Models and the Ego-Network Closure"
 author: "Simon Frost"
 date: today
-subtitle: "NodeBasedModels.jl Vignette 12 — Phase C capstone"
+subtitle: "NodeBasedModels.jl Vignette 11 — Phase C capstone"
 ---
 
 ## Introduction

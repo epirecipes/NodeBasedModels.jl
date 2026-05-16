@@ -2,7 +2,7 @@
 title: "Clustering Effects on Epidemic Dynamics"
 author: "Simon Frost"
 date: today
-subtitle: "NodeBasedModels.jl Vignette 09 (clustering effects)"
+subtitle: "NodeBasedModels.jl Vignette 08 (clustering effects)"
 ---
 
 ## Introduction

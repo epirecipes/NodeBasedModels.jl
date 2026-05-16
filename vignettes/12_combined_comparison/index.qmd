@@ -2,7 +2,7 @@
 title: "Combined comparison: four moment closures vs Gillespie"
 author: "Simon Frost"
 date: today
-subtitle: "NodeBasedModels.jl Vignette 13 — Phase D integration"
+subtitle: "NodeBasedModels.jl Vignette 12 — Phase D integration"
 engine: julia
 ---
 

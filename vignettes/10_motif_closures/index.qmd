@@ -2,7 +2,7 @@
 title: "Motif Closures and the Marginalisation Obstruction"
 author: "Simon Frost"
 date: today
-subtitle: "NodeBasedModels.jl Vignette 11 — Phase B capstone"
+subtitle: "NodeBasedModels.jl Vignette 10 — Phase B capstone"
 ---
 
 ## Introduction

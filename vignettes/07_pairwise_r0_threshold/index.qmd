@@ -2,7 +2,7 @@
 title: "Basic Reproduction Number and Epidemic Threshold"
 author: "Simon Frost"
 date: today
-subtitle: "NodeBasedModels.jl Vignette 08 (pairwise R₀ and threshold)"
+subtitle: "NodeBasedModels.jl Vignette 07 (pairwise R₀ and threshold)"
 ---
 
 ## Introduction

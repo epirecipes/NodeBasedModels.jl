@@ -2,7 +2,7 @@
 title: "Motif Shapes and State-Class Catalogue"
 author: "Simon Frost"
 date: today
-subtitle: "NodeBasedModels.jl Vignette 14 — Reference catalogue for (k,m) shape tables"
+subtitle: "NodeBasedModels.jl Vignette 13 — Reference catalogue for (k,m) shape tables"
 ---
 
 ## Introduction
