@@ -100,41 +100,40 @@ title!("Early exponential growth (canonical R₀ = 2)")
 
 ## Simulation validation
 
-We overlay the
-[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)
-Gillespie SSA on the early-growth trajectory at the canonical anchor
-($\tau = 0.125$, $\gamma = 0.25$, $R_0 = \tau(k-2)/\gamma = 2$ on a
-6-regular host graph). At small times the SSA-mean prevalence grows
-exponentially with the same rate $(R_0 - 1)\gamma = 0.25$ predicted by
-the pair-approximation.
+We validate the pair-approximation against Gillespie SSA on 6-regular
+graphs ($N = 1000$) at $\tau = 1/6$, $\gamma = 0.25$ (giving
+$R_0 = (k-1)T = 2$ where $T = \tau/(\tau+\gamma)$).
 
 ```{julia}
 include("../_validation.jl")
 
 N_v = 1000
-prog_no = sir_model(τ = :β)
-params_no = Dict(:β => 0.125, :γ => 0.25)
+τ_v = 1/6
+γ_v = 0.25
 
-t_no, μ_no, σ_no = gillespie_ribbon(prog_no, params_no,
+# Re-solve PA at the validation τ
+psys_v = generate_pairwise(sir_model(), regular_network(6), BernoulliClosure();
+                            tspan = (0.0, 40.0), N = 1.0, seed_fraction = 0.01)
+p_v = copy(psys_v.params); p_v[:τ] = τ_v; p_v[:γ] = γ_v
+sol_v = solve_pairwise(psys_v, p_v; reltol = 1e-8, abstol = 1e-10)
+
+prog_no = sir_model(τ = :β)
+t_no, μ_no, σ_no = gillespie_ribbon(prog_no,
+    Dict(:β => τ_v, :γ => γ_v),
     regular_graph_builder(N_v, 6);
-    N = N_v, n_graphs = 5, nsims_per_graph = 25,
-    tspan = (0.0, 60.0), seed_fraction = 0.01,
-    tgrid = collect(0.0:0.5:60.0),
-    major_outbreak_thresh = 0.05)
+    N = N_v, n_graphs = 5, nsims_per_graph = 40,
+    tspan = (0.0, 40.0), seed_fraction = 0.01,
+    tgrid = collect(0.0:0.5:40.0))
 ```
 
 ```{julia}
-#| label: fig-nbm-08-no-ribbon
-#| fig-cap: "Pair-approximation [I](t) (line) vs NetworkOutbreaks SSA mean ± 1σ (5 host graphs × 25 SSA replicates, N=1000, k=6, ε=0.01) at the canonical anchor R₀ = 2. Both grow exponentially at early times with rate (R₀-1)γ = 0.25."
-keep = t_no .<= 25
-p = plot(t_early, I_early, yscale = :log10, lw = 2, color = :red, label = "[I](t) (PA)")
-plot!(p, t_early, I0 .* exp.((2.0 - 1.0) * 0.25 .* t_early),
-      lw = 2, ls = :dash, color = :black, label = "exp((R₀-1)γt)")
-plot!(p, t_no[keep], μ_no[:I][keep],
-      ribbon = σ_no[:I][keep], yscale = :log10,
-      label = "I (SSA mean ± 1σ)", color = :darkred,
-      fillalpha = 0.18, linealpha = 0.5, lw = 1)
-xlabel!(p, "time"); ylabel!(p, "[I]")
-title!(p, "Early growth: pair-approximation vs SSA (R₀ = 2)")
+#| label: fig-nbm-07-validation
+#| fig-cap: "Pair-approximation (lines) vs Gillespie SSA mean ± 1σ ribbons (5 graphs × 40 replicates, N=1000, k=6, R₀=2, ε=0.01)."
+p = plot(sol_v.t, sol_v[psys_v.singles[:I]], label = "I (PA)", lw = 2, color = :red,
+         xlabel = "Time", ylabel = "Fraction",
+         title = "Pair-approximation vs SSA (k=6, R₀=2)")
+plot!(p, t_no, μ_no[:I], ribbon = σ_no[:I],
+      label = "I (SSA mean ± 1σ)", color = :red,
+      fillalpha = 0.2, linealpha = 0.4, lw = 1)
 p
 ```
