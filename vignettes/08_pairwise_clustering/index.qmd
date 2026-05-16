@@ -72,13 +72,12 @@ Triangle density modifies both the *speed* and the *final size* of an outbreak. 
 
 ## Simulation validation
 
-We overlay the
-[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)
-Gillespie SSA on the unclustered ($\phi = 0$) baseline trajectory, where
-the host graph is a 6-regular configuration model. SSA validation of the
-clustering-corrected closures (Keeling/Barnard) requires a graph builder
-that explicitly preserves $\phi$; that is deferred to a future revision
-of the shared validation helpers (see `vignettes/_validation.jl`).
+We validate the pair-approximation against Gillespie SSA at two
+clustering levels: $\phi = 0$ (unclustered, Bernoulli closure) and
+$\phi = 0.3$ (moderate clustering, Keeling closure). The SSA uses
+`clustered_regular_graph_builder` which applies triangle-forming
+degree-preserving edge swaps on a $k$-regular graph to achieve
+the target $\phi$.
 
 ```{julia}
 include("../_validation.jl")
@@ -87,28 +86,55 @@ N_v = 1000
 prog_no = sir_model(τ = :β)
 params_no = Dict(:β => τ_anchor, :γ => γ_anchor)
 
-t_no, μ_no, σ_no = gillespie_ribbon(prog_no, params_no,
+# --- ϕ = 0 (unclustered) ---
+t_uc, μ_uc, σ_uc = gillespie_ribbon(prog_no, params_no,
     regular_graph_builder(N_v, n_degree);
     N = N_v, n_graphs = 5, nsims_per_graph = 40,
     tspan = (0.0, 40.0), seed_fraction = 0.01,
     tgrid = collect(0.0:0.5:40.0))
+
+psys_uc = generate_pairwise(sir_model(), regular_network(n_degree, ϕ = 0.0),
+                             BernoulliClosure();
+                             tspan = (0.0, 40.0), N = 1.0, seed_fraction = 0.01)
+p_uc = copy(psys_uc.params); p_uc[:τ] = τ_anchor; p_uc[:γ] = γ_anchor
+sol_uc = solve_pairwise(psys_uc, p_uc; reltol = 1e-8, abstol = 1e-10)
+
+# --- ϕ = 0.3 (clustered) ---
+ϕ_target = 0.3
+t_cl, μ_cl, σ_cl = gillespie_ribbon(prog_no, params_no,
+    clustered_regular_graph_builder(N_v, n_degree, ϕ_target);
+    N = N_v, n_graphs = 3, nsims_per_graph = 60,
+    tspan = (0.0, 40.0), seed_fraction = 0.01,
+    tgrid = collect(0.0:0.5:40.0))
+
+psys_cl = generate_pairwise(sir_model(), regular_network(n_degree, ϕ = ϕ_target),
+                             KeelingClosure();
+                             tspan = (0.0, 40.0), N = 1.0, seed_fraction = 0.01)
+p_cl = copy(psys_cl.params); p_cl[:τ] = τ_anchor; p_cl[:γ] = γ_anchor
+sol_cl = solve_pairwise(psys_cl, p_cl; reltol = 1e-8, abstol = 1e-10)
 ```
 
 ```{julia}
-#| label: fig-nbm-08-no-ribbon
-#| fig-cap: "Pair-approximation I(t) at ϕ=0 baseline (line) vs SSA mean ± 1σ ribbon (5 graphs × 40 replicates, N=1000, k=6, R₀=2, ε=0.01)."
-psys_un  = generate_pairwise(sir_model(), regular_network(n_degree, ϕ = 0.0),
-                              BernoulliClosure();
-                              tspan = (0.0, 40.0), N = 1.0, seed_fraction = 0.01)
-p_un     = copy(psys_un.params); p_un[:τ] = τ_anchor; p_un[:γ] = γ_anchor
-sol_un   = solve_pairwise(psys_un, p_un; reltol = 1e-8, abstol = 1e-10)
+#| label: fig-nbm-08-validation
+#| fig-cap: "Pair-approximation I(t) vs SSA at two clustering levels. Left: ϕ=0 (Bernoulli closure); right: ϕ=0.3 (Keeling closure). N=1000, k=6, R₀=2 at ϕ=0. Clustering reduces both peak and final size; the Keeling closure tracks the clustered SSA mean."
+p1 = plot(sol_uc.t, sol_uc[psys_uc.singles[:I]],
+          label = "PA (Bernoulli)", lw = 2, color = :blue,
+          ylabel = "Fraction infected", title = "ϕ = 0 (unclustered)")
+plot!(p1, t_uc, μ_uc[:I], ribbon = σ_uc[:I],
+      label = "SSA", color = :blue, fillalpha = 0.2, linealpha = 0.4, lw = 1)
 
-p = plot(sol_un.t, sol_un[psys_un.singles[:I]],
-         label = "I (PA, ϕ=0)", lw = 2, color = :red,
-         xlabel = "Time", ylabel = "Fraction infected",
-         title = "Pair-approximation vs SSA (unclustered, R₀=2)")
-plot!(p, t_no, μ_no[:I], ribbon = σ_no[:I],
-      label = "I (SSA mean ± 1σ)", color = :red,
-      fillalpha = 0.2, linealpha = 0.4, lw = 1)
-p
+p2 = plot(sol_cl.t, sol_cl[psys_cl.singles[:I]],
+          label = "PA (Keeling)", lw = 2, color = :red,
+          title = "ϕ = 0.3 (clustered)")
+plot!(p2, t_cl, μ_cl[:I], ribbon = σ_cl[:I],
+      label = "SSA", color = :red, fillalpha = 0.2, linealpha = 0.4, lw = 1)
+
+plot(p1, p2, layout = (1, 2), size = (800, 350),
+     xlabel = "Time")
 ```
+
+The Bernoulli closure matches the unclustered SSA at $\phi = 0$. At
+$\phi = 0.3$, clustering reduces the epidemic; the Keeling closure
+(which accounts for the triangle density) tracks the clustered SSA
+mean, confirming that the closure correction captures the dominant
+effect of short cycles on SIR dynamics.
