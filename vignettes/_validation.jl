@@ -91,7 +91,7 @@ triangle by swapping (b,d)→(b,c) for some d, preserving all degrees.
 If the swap would increase clustering toward the target, accept it.
 """
 function clustered_regular_graph_builder(N::Int, k::Int, ϕ_target::Real;
-                                          max_iters::Int = 50_000)
+                                          max_iters::Int = 200_000)
     return function (rng)
         g = random_regular_graph(N, k; rng = rng)
         ϕ_target <= 0 && return g
@@ -102,40 +102,60 @@ end
 
 function _clustering_rewire!(g::SimpleGraph, ϕ_target::Real,
                               max_iters::Int, rng::AbstractRNG)
-    E = collect(edges(g))
-    for _ in 1:max_iters
-        global_cc = Graphs.global_clustering_coefficient(g)
-        global_cc >= ϕ_target && break
+    N = nv(g)
+    check_every = 5000
+    for iter in 1:max_iters
+        if iter % check_every == 0
+            Graphs.global_clustering_coefficient(g) >= ϕ_target && break
+        end
 
-        # Pick a random edge (u, v)
-        e1 = E[rand(rng, 1:length(E))]
-        u, v = src(e1), dst(e1)
+        # Find an open triangle: pick a random node v, two of its
+        # neighbors u and w that are NOT connected to each other.
+        v = rand(rng, 1:N)
+        nbrs = neighbors(g, v)
+        length(nbrs) < 2 && continue
+        i1, i2 = rand(rng, 1:length(nbrs)), rand(rng, 1:length(nbrs))
+        i1 == i2 && continue
+        u, w = nbrs[i1], nbrs[i2]
+        has_edge(g, u, w) && continue  # already a triangle
 
-        # Pick another random edge (w, x) where w is a neighbor of u but not v
+        # To close edge (u, w) while preserving degrees:
+        # remove one edge from u and one from w, add (u,w) + a replacement.
+        # Pick neighbor a of u (a ≠ v, w) and neighbor b of w (b ≠ v, u, a)
         u_nbrs = neighbors(g, u)
-        length(u_nbrs) < 2 && continue
-        w = u_nbrs[rand(rng, 1:length(u_nbrs))]
-        w == v && continue
-        has_edge(g, v, w) && continue   # triangle already exists
-
         w_nbrs = neighbors(g, w)
-        # Find a neighbor x of w that is not u, not v, and not already connected to v
-        candidates = [x for x in w_nbrs if x != u && x != v && !has_edge(g, v, x)]
-        isempty(candidates) && continue
-        x = candidates[rand(rng, 1:length(candidates))]
+        a_cands = [x for x in u_nbrs if x != v && x != w]
+        isempty(a_cands) && continue
+        a = a_cands[rand(rng, 1:length(a_cands))]
+        b_cands = [x for x in w_nbrs if x != v && x != u && x != a && !has_edge(g, a, x)]
+        isempty(b_cands) && continue
+        b = b_cands[rand(rng, 1:length(b_cands))]
 
-        # Swap: remove (v,u) and (w,x), add (v,w) and (u,x)
-        # Check that (u,x) doesn't already exist
-        has_edge(g, u, x) && continue
+        # Only accept if the swap doesn't destroy more triangles than it creates.
+        # Count triangles involving the 4 affected edges before and after.
+        tri_before = _local_triangles(g, u, a) + _local_triangles(g, w, b)
+        rem_edge!(g, u, a)
+        rem_edge!(g, w, b)
+        add_edge!(g, u, w)
+        add_edge!(g, a, b)
+        tri_after = _local_triangles(g, u, w) + _local_triangles(g, a, b)
 
-        rem_edge!(g, u, v)
-        rem_edge!(g, w, x)
-        add_edge!(g, v, w)
-        add_edge!(g, u, x)
-
-        # Update edge list
-        E = collect(edges(g))
+        if tri_after < tri_before
+            # Undo: swap back
+            rem_edge!(g, u, w)
+            rem_edge!(g, a, b)
+            add_edge!(g, u, a)
+            add_edge!(g, w, b)
+        end
     end
+end
+
+function _local_triangles(g::SimpleGraph, u::Int, v::Int)
+    count = 0
+    for w in neighbors(g, u)
+        w != v && has_edge(g, v, w) && (count += 1)
+    end
+    return count
 end
 
 # ---------------------------------------------------------------------------
