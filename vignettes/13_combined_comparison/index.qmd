@@ -22,7 +22,7 @@ by `NodeBasedModels.jl` on one common benchmark:
 
 The disease is SIS on a $k = 3$ regular graph with
 $\beta = 0.5$, $\gamma = 0.25$, $N = 1000$, initial prevalence
-$\epsilon = 0.001$, and horizon $t_{\max} = 120$.  These derive from the
+$\epsilon = 0.01$, and horizon $t_{\max} = 120$.  These derive from the
 canonical SIR parameters ($\gamma = 0.25$, anchored to $R_0 = 2$ via the
 homogeneous pairwise formula $R_0 = \tau(k-2)/\gamma$ for $k = 3$).
 
@@ -58,7 +58,7 @@ k        = 3
 γ_val    = 0.25
 R0_target = 2.0
 β_val    = R0_target * γ_val / (k - 2)  # homogeneous pairwise anchor
-ε_val    = 0.001
+ε_val    = 0.01
 tmax     = 120.0
 ensemble = 48
 save_dt  = 1.0

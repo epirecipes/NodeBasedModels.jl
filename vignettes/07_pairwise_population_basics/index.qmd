@@ -46,7 +46,7 @@ network = regular_network(6)          # 6-regular, no clustering (ϕ=0)
 closure = BernoulliClosure()
 psys    = generate_pairwise(model, network, closure;
                             tspan=(0.0, 200.0), N=1.0,
-                            seed_fraction = 0.001)
+                            seed_fraction = 0.01)
 ```
 
 The generator returns a `PairwiseSystem` containing the MTK `ODESystem`, default initial conditions, and parameter symbols.
@@ -139,13 +139,13 @@ params_no = Dict(:β => 0.125, :γ => 0.25)
 t_no, μ_no, σ_no = gillespie_ribbon(prog_no, params_no,
     regular_graph_builder(N_v, 6);
     N = N_v, n_graphs = 5, nsims_per_graph = 20,
-    tspan = (0.0, 200.0), seed_fraction = 0.001, major_outbreak_thresh = 0.2,
+    tspan = (0.0, 200.0), seed_fraction = 0.01, major_outbreak_thresh = 0.2,
     tgrid = collect(0.0:1.0:200.0))
 ```
 
 ```{julia}
 #| label: fig-nbm-07-no-ribbon
-#| fig-cap: "Pair-approximation singles (lines) vs NetworkOutbreaks SSA mean ± 1σ ribbons (5 host graphs × 20 SSA replicates, N=1000, k=6, ε=0.001)."
+#| fig-cap: "Pair-approximation singles (lines) vs NetworkOutbreaks SSA mean ± 1σ ribbons (5 host graphs × 20 SSA replicates, N=1000, k=6, ε=0.01)."
 p = plot(sol.t, sol[psys.singles[:S]], label = "S (PA)", lw = 2, color = :blue,
          xlabel = "time", ylabel = "fraction",
          title = "Pair-approximation vs NetworkOutbreaks SSA")

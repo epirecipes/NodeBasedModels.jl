@@ -51,7 +51,7 @@ We sweep $\tau$ and record the final epidemic size:
 function final_R(τ_val; γ_val = 0.25, n = 6, T = 400.0)
     net = regular_network(n)
     psys = generate_pairwise(sir_model(), net, BernoulliClosure();
-                             tspan = (0.0, T), N = 1.0, seed_fraction = 0.001)
+                             tspan = (0.0, T), N = 1.0, seed_fraction = 0.01)
     p = copy(psys.params); p[:τ] = τ_val; p[:γ] = γ_val
     sol  = solve_pairwise(psys, p; reltol = 1e-8, abstol = 1e-10)
     return sol[psys.singles[:R]][end]
@@ -79,7 +79,7 @@ For supercritical $R_0 > 1$, $[I](t)$ grows exponentially with rate $r = (R_0 - 
 ```{julia}
 net = regular_network(6)
 psys = generate_pairwise(sir_model(), net, BernoulliClosure();
-                          tspan = (0.0, 60.0), N = 1.0, seed_fraction = 0.001)
+                          tspan = (0.0, 60.0), N = 1.0, seed_fraction = 0.01)
 I0 = 0.001
 p = copy(psys.params); p[:τ] = 0.125; p[:γ] = 0.25
 sol  = solve_pairwise(psys, p; reltol = 1e-10, abstol = 1e-12)
@@ -118,14 +118,14 @@ params_no = Dict(:β => 0.125, :γ => 0.25)
 t_no, μ_no, σ_no = gillespie_ribbon(prog_no, params_no,
     regular_graph_builder(N_v, 6);
     N = N_v, n_graphs = 5, nsims_per_graph = 25,
-    tspan = (0.0, 60.0), seed_fraction = 0.001,
+    tspan = (0.0, 60.0), seed_fraction = 0.01,
     tgrid = collect(0.0:0.5:60.0),
     major_outbreak_thresh = 0.05)
 ```
 
 ```{julia}
 #| label: fig-nbm-08-no-ribbon
-#| fig-cap: "Pair-approximation [I](t) (line) vs NetworkOutbreaks SSA mean ± 1σ (5 host graphs × 25 SSA replicates, N=1000, k=6, ε=0.001) at the canonical anchor R₀ = 2. Both grow exponentially at early times with rate (R₀-1)γ = 0.25."
+#| fig-cap: "Pair-approximation [I](t) (line) vs NetworkOutbreaks SSA mean ± 1σ (5 host graphs × 25 SSA replicates, N=1000, k=6, ε=0.01) at the canonical anchor R₀ = 2. Both grow exponentially at early times with rate (R₀-1)γ = 0.25."
 keep = t_no .<= 25
 p = plot(t_early, I_early, yscale = :log10, lw = 2, color = :red, label = "[I](t) (PA)")
 plot!(p, t_early, I0 .* exp.((2.0 - 1.0) * 0.25 .* t_early),
