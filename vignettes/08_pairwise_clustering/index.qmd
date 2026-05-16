@@ -31,7 +31,7 @@ T_anchor = R0_target / (n_degree - 1)   # T = R₀/(k-1) = 0.4
 function final_size(ϕ; closure = KeelingClosure(), τ = τ_anchor, γ = γ_anchor)
     net = regular_network(n_degree; ϕ = ϕ)
     psys = generate_pairwise(sir_model(), net, closure;
-                             tspan = (0.0, 80.0), N = 1.0,
+                             tspan = (0.0, 40.0), N = 1.0,
                              seed_fraction = 0.01)
     p = copy(psys.params); p[:τ] = τ; p[:γ] = γ
     sol  = solve_pairwise(psys, p; reltol = 1e-8, abstol = 1e-10)

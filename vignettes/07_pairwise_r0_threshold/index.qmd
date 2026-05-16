@@ -79,7 +79,7 @@ For supercritical $R_0 > 1$, $[I](t)$ grows exponentially with rate $r = (R_0 - 
 ```{julia}
 net = regular_network(6)
 psys = generate_pairwise(sir_model(), net, BernoulliClosure();
-                          tspan = (0.0, 60.0), N = 1.0, seed_fraction = 0.01)
+                          tspan = (0.0, 40.0), N = 1.0, seed_fraction = 0.01)
 I0 = 0.001
 p = copy(psys.params); p[:τ] = 0.125; p[:γ] = 0.25
 sol  = solve_pairwise(psys, p; reltol = 1e-10, abstol = 1e-12)

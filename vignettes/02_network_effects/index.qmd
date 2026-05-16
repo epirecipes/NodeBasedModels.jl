@@ -146,10 +146,10 @@ println("Cycle — edges: ", ne(g_cycle), ", mean degree: ",
 ```{julia}
 pb_tree = generate_pair_based(sir_model(), net_tree;
     infection_rate = 0.3, recovery_rate = 0.1,
-    initial_infected = [1], tspan = (0.0, 60.0), saveat = 0.5)
+    initial_infected = [1], tspan = (0.0, 40.0), saveat = 0.5)
 pb_cycle = generate_pair_based(sir_model(), net_cycle;
     infection_rate = 0.3, recovery_rate = 0.1,
-    initial_infected = [1], tspan = (0.0, 60.0), saveat = 0.5)
+    initial_infected = [1], tspan = (0.0, 40.0), saveat = 0.5)
 
 I_tree  = aggregate(pb_tree, :I)
 I_cycle = aggregate(pb_cycle, :I)
