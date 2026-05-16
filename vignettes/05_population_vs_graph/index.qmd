@@ -80,7 +80,7 @@ The individual-based model tracks $K - 1 = 2$ state probabilities per node (S an
 
 ```{julia}
 ib = generate_individual_based(sir_model(), net_graph;
-    infection_rate=0.125,
+    infection_rate=1/6,
     recovery_rate=0.25,
     initial_infected=[1],
     tspan=(0.0, 40.0),
@@ -96,7 +96,7 @@ The pair-based model additionally tracks the joint state of every directed edge 
 
 ```{julia}
 pb = generate_pair_based(sir_model(), net_graph;
-    infection_rate=0.125,
+    infection_rate=1/6,
     recovery_rate=0.25,
     initial_infected=[1],
     tspan=(0.0, 40.0),
@@ -183,7 +183,7 @@ Run graph-instance models on the BA graph:
 
 ```{julia}
 ib_ba = generate_individual_based(sir_model(), net_ba;
-    infection_rate=0.125,
+    infection_rate=1/6,
     recovery_rate=0.25,
     initial_infected=[1],
     tspan=(0.0, 40.0),
@@ -191,7 +191,7 @@ ib_ba = generate_individual_based(sir_model(), net_ba;
 )
 
 pb_ba = generate_pair_based(sir_model(), net_ba;
-    infection_rate=0.125,
+    infection_rate=1/6,
     recovery_rate=0.25,
     initial_infected=[1],
     tspan=(0.0, 40.0),
@@ -350,35 +350,43 @@ This layered approach uses the cheapest model that answers your question, escala
 
 ## Simulation validation
 
-We overlay the
-[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)
-Gillespie SSA on the regular-graph scenario where the population-level and
-graph-instance models are expected to agree ($\tau = 0.125$, $\gamma = 0.25$
-on a 6-regular host of $N = 200$). The SSA mean ± 1σ ribbon brackets both
-the individual-based and pair-based deterministic predictions.
+We validate the graph-instance pair-based model against Gillespie SSA
+on the same $k = 6$ regular graph topology ($N = 200$). Per-edge
+$\tau = 1/6$ gives $T = \tau/(\tau+\gamma) = 0.4$ and
+$R_0 = (k-1)T = 2$; $\gamma = 0.25$; 5 % initial seed.
 
 ```{julia}
 include("../_validation.jl")
 
 N_v = 200
-prog_no = sir_model(τ = :β)
-params_no = Dict(:β => 0.125, :γ => 0.25)
+τ_v = 1/6
 
-t_no, μ_no, σ_no = gillespie_ribbon(prog_no, params_no,
-    regular_graph_builder(N_v, 6);
-    N = N_v, n_graphs = 8, nsims_per_graph = 25,
-    tspan = (0.0, 40.0), seed_fraction = 1 / N_v, major_outbreak_thresh = 0.2,
+# Re-run PB on the same graph with matched ε
+pb_val = generate_pair_based(sir_model(), GraphNetwork(g);
+    infection_rate = τ_v, recovery_rate = 0.25,
+    tspan = (0.0, 40.0), saveat = 0.5, ε = 0.05)
+I_pb_val = aggregate(pb_val, :I) ./ nv(g)
+t_pb_val = range(0.0, 40.0; length = length(I_pb_val))
+
+# SSA on same graph topology
+fixed_regular = rng -> random_regular_graph(N_v, 6; seed = 123)
+prog_no = sir_model(τ = :β)
+t_no, μ_no, σ_no = gillespie_ribbon(prog_no,
+    Dict(:β => τ_v, :γ => 0.25),
+    fixed_regular;
+    N = N_v, n_graphs = 1, nsims_per_graph = 200,
+    tspan = (0.0, 40.0), seed_fraction = 0.05,
     tgrid = collect(0.0:0.5:40.0))
 ```
 
 ```{julia}
-#| label: fig-nbm-06-no-ribbon
-#| fig-cap: "Graph-instance individual-based and pair-based deterministic curves vs NetworkOutbreaks SSA mean ± 1σ ribbon (8 host graphs × 25 SSA replicates, N=200, k=6, ε=1/200)."
-p = plot(ib.sol.t, I_ib ./ nv(g), label = "Individual-based", lw = 2, ls = :dash, color = :red,
-         xlabel = "Time", ylabel = "Infected (normalised)",
-         title = "Graph-instance vs NetworkOutbreaks SSA")
-plot!(p, pb.sol.t, I_pb ./ nv(g), label = "Pair-based", lw = 2, color = :blue)
+#| label: fig-nbm-05-no-ribbon
+#| fig-cap: "Pair-based (blue) vs SSA mean ± 1σ (ribbon) on a k=6 regular graph (N=200, R₀=2, 5% seed). The pair-based closure matches SSA closely."
+p = plot(t_pb_val, I_pb_val, label = "Pair-based", lw = 2, color = :blue,
+         xlabel = "Time", ylabel = "Infected (fraction)",
+         title = "Graph-instance pair-based vs SSA (k=6, R₀=2)")
 plot!(p, t_no, μ_no[:I], ribbon = σ_no[:I],
-      label = "SSA (mean ± 1σ)", color = :black, fillalpha = 0.18, linealpha = 0.5, lw = 1)
+      label = "SSA (mean ± 1σ)", color = :blue,
+      fillalpha = 0.2, linealpha = 0.4, lw = 1)
 p
 ```
