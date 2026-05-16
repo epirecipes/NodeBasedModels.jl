@@ -70,7 +70,7 @@ Unlike population-level models, node-based models resolve the epidemic **at each
 ```{julia}
 ib_result = generate_individual_based(
     sir_model(), net;
-    infection_rate = 0.25,
+    infection_rate = 0.5,
     recovery_rate  = 0.25,
     initial_infected = [1],
     tspan  = (0.0, 60.0),
@@ -108,7 +108,7 @@ The error grows with the density of short cycles in the graph. We demonstrate th
 ```{julia}
 pb_result = generate_pair_based(
     sir_model(), net;
-    infection_rate = 0.25,
+    infection_rate = 0.5,
     recovery_rate  = 0.25,
     initial_infected = [1],
     tspan  = (0.0, 60.0),
@@ -144,7 +144,7 @@ println("Tree — nodes: ", nv(g_tree), ", edges: ", ne(g_tree))
 ```{julia}
 pb_tree = generate_pair_based(
     sir_model(), net_tree;
-    infection_rate = 0.25,
+    infection_rate = 0.5,
     recovery_rate  = 0.25,
     initial_infected = [1],
     tspan  = (0.0, 50.0),
@@ -156,7 +156,7 @@ gill_tree = gillespie_sir_average(
     nruns          = 50,
     dt             = 0.5,
     tmax_grid      = 50.0,
-    infection_rate = 0.25,
+    infection_rate = 0.5,
     recovery_rate  = 0.25,
     initial_infected = [1]
 )
@@ -236,10 +236,10 @@ for N in sizes
     net_n = GraphNetwork(g_n)
 
     ib_n = generate_individual_based(sir_model(), net_n;
-        infection_rate = 0.25, recovery_rate = 0.25,
+        infection_rate = 0.5, recovery_rate = 0.25,
         initial_infected = [1], tspan = (0.0, 80.0), saveat = 1.0)
     pb_n = generate_pair_based(sir_model(), net_n;
-        infection_rate = 0.25, recovery_rate = 0.25,
+        infection_rate = 0.5, recovery_rate = 0.25,
         initial_infected = [1], tspan = (0.0, 80.0), saveat = 1.0)
 
     I_ib_n = aggregate(ib_n, :I)
@@ -279,39 +279,62 @@ As $N$ grows, the normalised gap shrinks — the local tree-like structure of la
 
 ## Simulation validation
 
-We overlay the
-[`NetworkOutbreaks.jl`](https://github.com/sdwfrost/NetworkOutbreaks.jl)
-Gillespie SSA on the order-1/order-2 comparison from above. Because
-$N = 30$ leaves a very noisy single-graph trajectory, the ribbon is
-averaged over multiple host-graph realisations from the same
-`random_regular_graph(30, 4)` family. The seed fraction
-$\varepsilon = 1/30$ matches the deterministic single-node seed; rates
-follow the canonical anchor ($\tau = 0.25$, $\gamma = 0.25$, so
-$R_0 = \tau(k-2)/\gamma = 2$).
+We validate the order-2 (Kirkwood) and order-1 (NIMFA) closures against
+Gillespie SSA on $k = 4$ regular graphs ($N = 30$). To give each model
+$R_0 = 2$ under its own threshold formula, we use different $\tau$ values
+(as in vignette 01):
+
+| Closure | $R_0$ formula | $\tau$ for $R_0=2$ |
+|---------|--------------|-------------------|
+| NIMFA | $\tau k / \gamma$ | $0.125$ |
+| Kirkwood / SSA | $(k-1)\,\tau/(\tau+\gamma)$ | $0.5$ |
+
+We seed 5 % of nodes to suppress die-outs.
 
 ```{julia}
 include("../_validation.jl")
 
 N_v = 30
-prog_no = sir_model(τ = :β)
-params_no = Dict(:β => 0.25, :γ => 0.25)
+τ_ib_v  = 2 * 0.25 / 4          # 0.125 — NIMFA R₀ = τk/γ = 2
+τ_pb_v  = 0.5                    # (k-1)τ/(τ+γ) = 3*0.5/0.75 = 2
 
-t_no, μ_no, σ_no = gillespie_ribbon(prog_no, params_no,
+# Re-run PB and IB with matched ε=0.05 seed
+ib_v = generate_individual_based(sir_model(), net;
+    infection_rate = τ_ib_v, recovery_rate = 0.25,
+    tspan = (0.0, 60.0), saveat = 0.5, ε = 0.05)
+I_ib_v = aggregate(ib_v, :I)
+t_ib_v = range(0.0, 60.0; length = length(I_ib_v))
+
+pb_v = generate_pair_based(sir_model(), net;
+    infection_rate = τ_pb_v, recovery_rate = 0.25,
+    tspan = (0.0, 60.0), saveat = 0.5, ε = 0.05)
+I_pb_v2 = aggregate(pb_v, :I)
+t_pb_v = range(0.0, 60.0; length = length(I_pb_v2))
+
+# SSA at same τ as pair-based
+prog_no = sir_model(τ = :β)
+t_no, μ_no, σ_no = gillespie_ribbon(prog_no,
+    Dict(:β => τ_pb_v, :γ => 0.25),
     regular_graph_builder(N_v, 4);
     N = N_v, n_graphs = 12, nsims_per_graph = 25,
-    tspan = (0.0, 60.0), seed_fraction = 1 / N_v,
-    major_outbreak_thresh = 0.2)
+    tspan = (0.0, 60.0), seed_fraction = 0.05)
 ```
 
 ```{julia}
 #| label: fig-nbm-03-no-ribbon
-#| fig-cap: "NetworkOutbreaks SSA mean ± 1σ ribbon (12 host graphs × 25 SSA replicates) overlaid on order-1 (NIMFA) and order-2 (Kirkwood) deterministic trajectories. The exact stochastic distribution sits between (and slightly below) both deterministic closures, consistent with the documented closure ordering."
-p = plot(t_vals, I_ib, label = "Order-1 (NIMFA)", lw = 2, ls = :dash, color = :red,
+#| fig-cap: "Each model at R₀=2 under its own formula (k=4, N=30, 5% seed). Pair-based (blue) matches SSA closely. NIMFA (red dashed) uses a much lower τ=0.125 (R₀=τk/γ=2) and still shows different dynamics because its independence closure is very inaccurate on k=4."
+p = plot(t_pb_v, I_pb_v2, label = "Order-2 Kirkwood (τ=0.5)", lw = 2, color = :blue,
          xlabel = "Time", ylabel = "Number infected",
-         title = "Order-1 vs Order-2 vs NetworkOutbreaks SSA (N=30)")
-plot!(p, t_pb, I_pb, label = "Order-2 (Kirkwood)", lw = 2, color = :darkred)
+         title = "Closure hierarchy at R₀=2 (k=4, N=30)")
+plot!(p, t_ib_v, I_ib_v, label = "Order-1 NIMFA (τ=0.125)", lw = 2, ls = :dash, color = :red)
 plot!(p, t_no, μ_no[:I] .* N_v, ribbon = σ_no[:I] .* N_v,
-      label = "NO SSA (mean ± 1σ)", color = :black,
-      fillalpha = 0.18, linealpha = 0.5, lw = 1)
+      label = "SSA (τ=0.5, mean ± 1σ)", color = :blue,
+      fillalpha = 0.2, linealpha = 0.4, lw = 1)
 p
 ```
+
+On $k = 4$, the NIMFA independence closure is particularly poor because
+each node has only 3 remaining neighbours after discounting the infector —
+too few for the law of large numbers to justify the independence assumption.
+The pair-based closure captures the dominant pair correlations and matches
+the SSA ensemble mean well.
