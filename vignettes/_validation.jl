@@ -103,7 +103,7 @@ end
 function _clustering_rewire!(g::SimpleGraph, ϕ_target::Real,
                               max_iters::Int, rng::AbstractRNG)
     N = nv(g)
-    check_every = 5000
+    check_every = 500
     for iter in 1:max_iters
         if iter % check_every == 0
             Graphs.global_clustering_coefficient(g) >= ϕ_target && break

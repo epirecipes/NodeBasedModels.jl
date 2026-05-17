@@ -99,10 +99,10 @@ psys_uc = generate_pairwise(sir_model(), regular_network(n_degree, ϕ = 0.0),
 p_uc = copy(psys_uc.params); p_uc[:τ] = τ_anchor; p_uc[:γ] = γ_anchor
 sol_uc = solve_pairwise(psys_uc, p_uc; reltol = 1e-8, abstol = 1e-10)
 
-# --- ϕ ≈ 0.3 (clustered) ---
+# --- ϕ ≈ 0.2 (clustered) ---
 # Build one clustered graph, measure its actual ϕ, then use that in the PA.
-ϕ_target = 0.3
-cl_builder = clustered_regular_graph_builder(N_v, n_degree, ϕ_target)
+ϕ_target = 0.2
+cl_builder = clustered_regular_graph_builder(N_v, n_degree, ϕ_target; max_iters = 500_000)
 g_sample = cl_builder(StableRNG(20240501))
 ϕ_actual = Graphs.global_clustering_coefficient(g_sample)
 println("Clustered graph: target ϕ=$ϕ_target, achieved ϕ=$(round(ϕ_actual; digits=3))")
