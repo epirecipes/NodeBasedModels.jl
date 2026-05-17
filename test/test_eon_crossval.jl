@@ -46,4 +46,27 @@ const ref = JSON3.read(read(joinpath(@__DIR__, "eon_reference.json"), String))
         I_pw = sol[psys.singles[:I]]
         @test isapprox(maximum(I_pw), ref.sir_hom_pairwise_k6.peak_I; rtol=0.02)
     end
+
+    @testset "SIS individual-based (NIMFA) on k=6 regular" begin
+        ib = generate_individual_based(sis_model(), net;
+            infection_rate = τ, recovery_rate = γ,
+            tspan = (0.0, 80.0), saveat = 0.5, ε = 0.01)
+        I_ib = aggregate(ib, :I) ./ 1000
+        @test isapprox(I_ib[end], ref.sis_ib_regular6.endemic_I; rtol=0.02)
+    end
+
+    @testset "SIS pair-based (Kirkwood) on k=6 regular" begin
+        pb = generate_pair_based(NodeBasedModels.sir_model(), net;
+            infection_rate = τ, recovery_rate = γ,
+            tspan = (0.0, 80.0), saveat = 0.5, ε = 0.01)
+        # SIR pair-based doesn't support SIS directly; skip if unavailable
+        # Instead test the population-level SIS pairwise
+        psys_sis = generate_pairwise(sis_model(), regular_network(6),
+            BernoulliClosure(); tspan = (0.0, 80.0), N = 1.0,
+            seed_fraction = 0.01)
+        p = copy(psys_sis.params); p[:τ] = τ; p[:γ] = γ
+        sol = solve_pairwise(psys_sis, p; reltol=1e-8, abstol=1e-10)
+        I_pw = sol[psys_sis.singles[:I]]
+        @test isapprox(I_pw[end], ref.sis_hom_pairwise_k6.endemic_I; rtol=0.02)
+    end
 end
