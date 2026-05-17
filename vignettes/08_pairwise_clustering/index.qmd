@@ -99,15 +99,21 @@ psys_uc = generate_pairwise(sir_model(), regular_network(n_degree, ϕ = 0.0),
 p_uc = copy(psys_uc.params); p_uc[:τ] = τ_anchor; p_uc[:γ] = γ_anchor
 sol_uc = solve_pairwise(psys_uc, p_uc; reltol = 1e-8, abstol = 1e-10)
 
-# --- ϕ = 0.3 (clustered) ---
+# --- ϕ ≈ 0.3 (clustered) ---
+# Build one clustered graph, measure its actual ϕ, then use that in the PA.
 ϕ_target = 0.3
+cl_builder = clustered_regular_graph_builder(N_v, n_degree, ϕ_target)
+g_sample = cl_builder(StableRNG(20240501))
+ϕ_actual = Graphs.global_clustering_coefficient(g_sample)
+println("Clustered graph: target ϕ=$ϕ_target, achieved ϕ=$(round(ϕ_actual; digits=3))")
+
 t_cl, μ_cl, σ_cl = gillespie_ribbon(prog_no, params_no,
-    clustered_regular_graph_builder(N_v, n_degree, ϕ_target);
+    cl_builder;
     N = N_v, n_graphs = 3, nsims_per_graph = 60,
     tspan = (0.0, 40.0), seed_fraction = 0.01,
     tgrid = collect(0.0:0.5:40.0))
 
-psys_cl = generate_pairwise(sir_model(), regular_network(n_degree, ϕ = ϕ_target),
+psys_cl = generate_pairwise(sir_model(), regular_network(n_degree, ϕ = ϕ_actual),
                              KeelingClosure();
                              tspan = (0.0, 40.0), N = 1.0, seed_fraction = 0.01)
 p_cl = copy(psys_cl.params); p_cl[:τ] = τ_anchor; p_cl[:γ] = γ_anchor
@@ -116,7 +122,7 @@ sol_cl = solve_pairwise(psys_cl, p_cl; reltol = 1e-8, abstol = 1e-10)
 
 ```{julia}
 #| label: fig-nbm-08-validation
-#| fig-cap: "Pair-approximation I(t) vs SSA at two clustering levels. Left: ϕ=0 (Bernoulli closure); right: ϕ=0.3 (Keeling closure). N=1000, k=6, R₀=2 at ϕ=0. Clustering reduces both peak and final size; the Keeling closure tracks the clustered SSA mean."
+#| fig-cap: "Pair-approximation I(t) vs SSA at two clustering levels. Left: ϕ=0 (Bernoulli closure); right: ϕ≈0.3 (Keeling closure at the graph's measured ϕ). N=1000, k=6, R₀=2 at ϕ=0."
 p1 = plot(sol_uc.t, sol_uc[psys_uc.singles[:I]],
           label = "PA (Bernoulli)", lw = 2, color = :blue,
           ylabel = "Fraction infected", title = "ϕ = 0 (unclustered)")
@@ -125,7 +131,7 @@ plot!(p1, t_uc, μ_uc[:I], ribbon = σ_uc[:I],
 
 p2 = plot(sol_cl.t, sol_cl[psys_cl.singles[:I]],
           label = "PA (Keeling)", lw = 2, color = :red,
-          title = "ϕ = 0.3 (clustered)")
+          title = "ϕ ≈ $(round(ϕ_actual; digits=2)) (clustered)")
 plot!(p2, t_cl, μ_cl[:I], ribbon = σ_cl[:I],
       label = "SSA", color = :red, fillalpha = 0.2, linealpha = 0.4, lw = 1)
 
