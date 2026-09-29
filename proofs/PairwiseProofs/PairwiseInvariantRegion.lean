@@ -156,6 +156,14 @@ theorem node_conservation (τ γ SI I : ℚ) :
     let dR := γ * I
     dS + dI + dR = 0 := by ring
 
+/-- SIS node-level conservation: infection moves one node S→I and recovery
+    moves one node I→S, so d(S+I)/dt = 0. This mirrors the generated
+    `generate_pairwise(sis_model(), ...)` node equations. -/
+theorem sis_node_conservation (τ γ SI I : ℚ) :
+    let dS := -(τ * SI) + γ * I
+    let dI := τ * SI - γ * I
+    dS + dI = 0 := by ring
+
 /-- **Result 127.** dS/dt = −τ[SI] ≤ 0 when [SI] ≥ 0.
     The susceptible fraction is monotone *non-increasing* along every
     trajectory of the pairwise SIR model. -/
