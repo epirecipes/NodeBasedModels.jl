@@ -218,11 +218,28 @@ end
     end
 end
 
+# Several of these solves (the subcritical Keeling cases near δ = ∞) are very stiff: the default
+# auto-switching algorithm hits maxiters at τ = 0.08 or 0.12 depending on the platform (x86-64
+# vs arm64), while Rodas5P completes those but reports Unstable on some non-stiff supercritical
+# cases that the default handles. So try the default first, fall back to stiff solvers, and fail
+# loudly (never silently truncate) if none completes. The completed solvers agree to ~1e-12.
+const FALLBACK_SOLVERS = (nothing, OrdinaryDiffEqDefault.Rodas5P(), OrdinaryDiffEqDefault.FBDF())
+
+function robust_solve(psys, p; kwargs...)
+    retcodes = Symbol[]
+    for solver in FALLBACK_SOLVERS
+        sol = solve_pairwise(psys, p; solver, kwargs...)
+        Symbol(sol.retcode) === :Success && return sol
+        push!(retcodes, Symbol(sol.retcode))
+    end
+    error("robust_solve: every solver failed (retcodes $retcodes) for p = $p")
+end
+
 # The early exponential phase of the built ODE: log-slope of [I] over [t1, t2] from a seed ε.
 function ode_slope(psys, τ, γ; t1, t2, ε = 1e-13)
-    sol = solve_pairwise(psys, Dict(:τ => τ, :γ => γ); saveat = [t1, t2], reltol = 1e-11,
-                         abstol = 1e-28, maxiters = 10^6, tspan = (0.0, t2),
-                         u0 = default_initial_conditions(psys; seed_fraction = ε))
+    sol = robust_solve(psys, Dict(:τ => τ, :γ => γ); saveat = [t1, t2], reltol = 1e-11,
+                       abstol = 1e-28, maxiters = 10^6, tspan = (0.0, t2),
+                       u0 = default_initial_conditions(psys; seed_fraction = ε))
     I = compartment(psys, sol, :I)
     return (log(I[2]) - log(I[1])) / (t2 - t1)
 end
@@ -299,8 +316,8 @@ end
         @test ode_slope(psys, τ, γ; t1, t2) ≈ r atol = 2e-3
         @test keeling_fast_slope(net, τ, γ, :SIS; t1 = 200.0, t2 = 400.0) ≈ r atol = 1e-8
     end
-    sol = solve_pairwise(psys, Dict(:τ => 0.08, :γ => γ); saveat = [15.0, 20.0], reltol = 1e-11,
-                         abstol = 1e-28, tspan = (0.0, 20.0),
+    sol = robust_solve(psys, Dict(:τ => 0.08, :γ => γ); maxiters = 10^6,
+                       saveat = [15.0, 20.0], reltol = 1e-11, abstol = 1e-28, tspan = (0.0, 20.0),
                          u0 = default_initial_conditions(psys; seed_fraction = 1e-13))
     I = compartment(psys, sol, :I)
     α, δ = sol[psys.pairs[(:S, :I)]] ./ I, sol[psys.pairs[(:I, :I)]] ./ I

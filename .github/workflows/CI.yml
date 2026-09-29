@@ -31,12 +31,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # [sources] needs Julia 1.11: on 1.10 the sibling packages cannot be resolved. Both
-        # resolve afresh. (Not 1.12, which would use the committed Manifest.toml: with its older
-        # OrdinaryDiffEq stack and ForwardDiff Jacobians, the stiff Keeling solves at τ = 0.08 in
-        # test/suites/analysis_nbm.jl hit maxiters on Linux x86-64, though they pass on macOS
-        # arm64 and with the current releases.)
-        version: ['1.11', '1']
+        # [sources] needs Julia 1.11: on 1.10 the sibling packages cannot be resolved. 1.11 and 1
+        # resolve afresh; 1.12 uses the committed Manifest.toml (updated so that the stiff Keeling
+        # solves in test/suites/analysis_nbm.jl pass on Linux x86-64 too).
+        version: ['1.11', '1.12', '1']
         os: [ubuntu-latest]
     steps:
       - uses: actions/checkout@v4
