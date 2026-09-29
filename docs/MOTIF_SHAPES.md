@@ -112,7 +112,9 @@ Aut: S₄. Classes by number of I's.
 
 ## Kirkwood closure identities
 
-**(k=2, m=3)** — P₄ closure at an endpoint (more stable single-denominator form):
+**(k=2, m=3)** — P₄ closure at an endpoint (single-vertex anchor; the external-infection flow
+at an end carries the slot factor n_ext/k = 1/2, since ⟨σ₁ I⟩/⟨σ₁⟩ counts both neighbours of the
+end vertex, fixed in 0.2):
 
 $$L_{(\sigma_0,\sigma_1,\sigma_2,\sigma_3)}^{P_4} \approx L_{(\sigma_0,\sigma_1,\sigma_2)}^{P_3}\cdot L_{(\sigma_1)}^{\rm node}\;/\;\langle\sigma_1\rangle$$
 
@@ -124,11 +126,10 @@ $$L_{P_{m+1}} \approx L_{P_m}(\sigma_0,\ldots,\sigma_{m-1})\cdot L_{P_m}(\sigma_
 
 - **(k=2, m=7):** add P₇ (orbit-1: 8 classes, orbit-2: 56 classes = **64 new vars**).
   The generic chain builder extends directly with no new code.
-- **(k=3, m=5):** open extension. The current `(k=3,m=4)` Kirkwood refinement
-  is already subject to the Lean-certified m=4→m=3 marginalisation obstruction
-  (T3b/T7 in `EdgeBasedModels.jl/proofs/EBCMCategory/`), so higher-order
-  extensions should not be interpreted as automatic monotone improvements.
-  A non-Kirkwood or constrained-consistency closure is the likely next
-  research direction.
+- **(k=3, m=5):** open extension. The `(k=3,m=4)` per-shape Kirkwood closure
+  (fixed in 0.2, verified issue B05: no slot factor, all completions of the
+  anchor, host 3-from-4 multiplicities) improves on m = 3 against SSA in the
+  tested regimes, but higher orders are not guaranteed to be monotone
+  improvements; validate any extension against NetworkOutbreaks simulations.
 - **(k=4, m=2):** trivial — the `(k=2,m=2)` RHS builder is already parameterised
   by `κ=(k−1)/k`; 5 variables.

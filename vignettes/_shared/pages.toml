@@ -1,0 +1,118 @@
+# Owner: V-NBM-infra. The page catalogue of the NodeBasedModels.jl vignettes (DESIGN_NetworkEpiCore.md §F.2, plus
+# the stretch page N14 of WP36e). One table per page. A page lives in the directory `<id>_<slug>/index.qmd` (any
+# slug); `index.qmd` links it once it exists and lists it as "in preparation" until then, and
+# `_shared/check_pages.jl` checks it against this catalogue.
+#
+#   title      the page title (the page's own front matter should use the same title)
+#   scenarios  the registered scenario ids the page uses (mirrored pages use the same ids; rule 5/7)
+#   layers     L = low-level front end, F = factory, T = transform or composition, M = morphism / verify,
+#              S = NetworkOutbreaks simulation overlay
+#   mirrors    the EdgeBasedModels.jl pages this page mirrors (the cross-references of DESIGN §F.1/§F.2). Each mirrored
+#              pair shares ONE cell, textually identical apart from back-end lines and using the same scenario ids
+#              (rule 5/7): the cell labelled `shared-cell-<E>` on this page if there is one, else `shared-cell`
+#              (and `shared-cell-<N>` / `shared-cell` on the EBM page). The rest of the two pages may use different
+#              scenarios, as the DESIGN tables do (E10 adds :sir_unstr2, N04 :sir_reg6_fixed; they share :sir_sbm2).
+#              N02 mirrors both E03 and E06, whose shared cells differ, so N02 carries `shared-cell-E03` and
+#              `shared-cell-E06`; E03 and E06 need not share a cell with each other.
+#   summaries  whether the page compares with committed NO summaries (true: `require_summaries(scenarios)`)
+
+[N01]
+title = "From a reaction network to a pairwise model"
+scenarios = ["sir_pois5", "sir_reg6"]
+layers = ["L", "F", "S"]
+mirrors = ["E01"]
+summaries = true
+
+[N02]
+title = "Closures and degree heterogeneity"
+scenarios = ["sir_reg6", "sir_pois5", "sir_nb4", "sir_bim", "sir_pl",
+             "sir_pois5_N1000", "sir_pois5_N100000", "sir_bim_N1000", "sir_bim_N100000",
+             "sir_pl_N1000", "sir_pl_N100000", "seair_pois5"]   # :seair_pois5 in shared-cell-E06 (E06's list)
+layers = ["L", "F", "S"]
+mirrors = ["E03", "E06"]   # two shared cells: shared-cell-E03 and shared-cell-E06
+summaries = true
+
+[N03]
+title = "Natural history in pairwise models"
+scenarios = ["seir_pois5", "sir_erl3_pois5", "seair_pois5", "twostrain_pois5", "sir_vax_pois5", "sirs_pois5"]
+layers = ["L", "T", "S"]
+mirrors = ["E04"]
+summaries = true
+
+[N04]
+title = "Graph-level models: individual- and pair-based"
+scenarios = ["sir_reg6_fixed", "sir_sbm2"]
+layers = ["L", "S"]
+mirrors = ["E10"]     # DESIGN §F.2: "E10 (instance)"; the shared cell uses :sir_sbm2, the scenario both pages have
+summaries = true
+
+[N05]
+title = "Clustering"
+scenarios = ["sir_clust_s2t2", "sir_clust_pois12", "sir_clust_s2t2_N1000", "sir_clust_s2t2_N100000",
+             "sir_reg6"]   # the unclustered comparison of E08 (DESIGN §F.1: :sir_clust_s2t2 vs :sir_reg6)
+layers = ["L", "S"]
+mirrors = ["E08"]
+summaries = true
+
+[N06]
+title = "Back to mass action"
+scenarios = ["sir_wm5", "sir_dense_pois5", "sir_dense_pois20", "sir_dense_pois100"]
+layers = ["L", "S"]
+mirrors = ["E05"]
+summaries = true
+
+[N07]
+title = "Thresholds and R₀: SIR versus SIS"
+scenarios = ["sir_reg6", "sis_reg3"]
+layers = ["F"]
+mirrors = []
+summaries = false
+
+[N08]
+title = "Why pairwise composition is lax"
+scenarios = ["seir_pois5", "sir_sbm2"]
+layers = ["T"]
+mirrors = ["E12"]
+summaries = false
+
+[N09]
+title = "SIS: pairwise and reinfection counting"
+scenarios = ["sis_reg3"]
+layers = ["L", "T", "S"]
+mirrors = []
+summaries = true
+
+[N10]
+title = "Motif closures"
+scenarios = ["sis_reg3"]
+layers = ["L", "S"]
+mirrors = []
+summaries = true
+
+[N11]
+title = "Neighbourhood model (n = 2)"
+scenarios = ["sis_reg3"]
+layers = ["L", "S"]
+mirrors = []
+summaries = true
+
+[N12]
+title = "All SIS approximations against simulation"
+scenarios = ["sis_reg3"]
+layers = ["S"]
+mirrors = ["E13"]
+summaries = true
+
+[N13]
+title = "Motif catalogue and validation methodology"
+scenarios = ["sir_pois5"]   # the scenario of the shared cell (E14: "all :exact_limit scenarios")
+layers = []
+mirrors = ["E14"]
+summaries = false
+
+[N14]
+title = "Multitype pairwise models"
+scenarios = ["sir_sbm2", "sir_age2"]
+layers = ["L", "M", "S"]
+mirrors = []          # DESIGN WP36e names no mirror; E10's pair with NBM is N04
+summaries = true

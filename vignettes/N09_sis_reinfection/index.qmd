@@ -1,0 +1,313 @@
+---
+title: "SIS: pairwise and reinfection counting"
+subtitle: "NodeBasedModels.jl vignette N09: the SIS pairwise model, the reinfection-counting refinement with L = 0…4, and both against NetworkOutbreaks"
+---
+
+## What this page shows
+
+In SIS a recovered node is susceptible again (I → S, typing `:resus`). The model is outside the
+edge-based fragment T_EB (page E13), but the pairwise model accepts it. On a 3-regular network
+the pairwise model reaches the right endemic level but gets the take-off wrong. Keeling, House,
+Cooper and Pellis (2016, *PLoS Comput. Biol.* 12:e1005296) refine the pairwise model by counting infections: a node
+that has been infected p times is kept in its own class S_p or I_p, up to a cap L. This page:
+
+1. builds the SIS pairwise model of `:sis_reg3` from a Catalyst network, then with the factory,
+   and asserts that the two are the same;
+2. applies the syntax transform `with_reinfection_counting(model, L)` for L = 0, …, 4 and lifts
+   each result, again in both forms;
+3. compares prevalence and cumulative incidence with the committed NetworkOutbreaks ensemble,
+   which is conditioned on survival;
+4. compares the fractions of nodes infected p times at the end of the run with the reinfection
+   histogram stored in the committed summary.
+
+```{julia}
+#| label: setup
+#| output: false
+include(joinpath(@__DIR__, "..", "_shared", "setup.jl"))
+require_summaries([:sis_reg3])
+```
+
+## The SIS pairwise model, twice
+
+```{julia}
+using Catalyst
+sis = @reaction_network sis begin
+    @parameters τ γ
+    τ, S + I --> 2I        # contact: per-contact (per-edge) rate τ
+    γ, I --> S             # recovery back into the susceptible class (type resus)
+end
+model = contact_model(sis)          # the typing report: T_net, not T_EB
+```
+
+```{julia}
+sc = scenario(:sis_reg3)            # 3-regular, τ = 1/2, γ = 1/4, 1% seeds in I, t ∈ [0, 80]
+@assert isequivalent(model, sc.model)
+sys  = node_based(model, sc.network)                                                           # low level
+sysF = generate_pairwise(sis_model(), sc.network, default_closure(sc.network); cumulative = true)  # factory
+@assert vector_fields_equal(symbolic_ode(sys), symbolic_ode(sysF))
+(; closure = default_closure(sc.network), K = closure_constant(sc.network.degrees))
+```
+
+On a k-regular network the default closure is the Bernoulli (Keeling) closure
+[ABC] ≈ K[AB][BC]/[B] with K = (k − 1)/k. The equations, with the pairs counted as ordered pairs
+([SS] counts each SS edge twice):
+
+```{julia}
+symbolic_ode(sys)
+```
+
+The scenario is above the pairwise threshold τ_c = γ/(k − 1):
+
+```{julia}
+a = anchors(sc);
+```
+
+Here τ/τ_c = `{julia} fmt(sc.params[:τ] / a.τc)`, so the pairwise model has an endemic
+equilibrium.
+
+## Reinfection counting as a syntax transform
+
+`with_reinfection_counting(model, L)` refines every compartment X into X_p, where p is the
+number of infections the node has had, saturating at L. An infection takes S_p to I_{min(p+1, L)}
+whatever the count of the infector; every other reaction keeps the count. For L = 2:
+
+```{julia}
+m2 = with_reinfection_counting(model, 2)
+```
+
+```{julia}
+#| output: asis
+md_table(["reaction", "type", "from", "to", "rate"],
+         vcat([(string(c.name), "contact", "$(c.recipient) + $(c.infector)", "$(c.product) + $(c.infector)",
+                string(c.rate)) for c in contacts(m2)],
+              [(string(t.name), "transition", string(t.from), string(t.to), string(t.rate))
+               for t in m2.transitions]))
+```
+
+The refined model has three susceptible classes S₀, S₁ and S₂ and arrows back into two of them,
+so it is again a T_net model for the node-based and stochastic back ends only. Nodes that have
+never been infected start in S₀. The seeds are counted as infected once, so they start in I₁, as
+in NetworkOutbreaks, whose reinfection counter also counts a seed once. The seeding is therefore
+the scenario's 1% placed in the count-one class:
+
+```{julia}
+ρ = last(only(sc.initial.fractions))
+seed(L) = SeedFraction(Symbol(:I_, min(1, L)) => ρ)       # L = 0: the unrefined model, I₀ = I
+(; ρ, seeds = [seed(L) for L in 0:4])
+```
+
+Each refined model is lifted in both forms, and the two vector fields are compared:
+
+```{julia}
+#| output: asis
+Ls = 0:4
+refined = Dict(L => with_reinfection_counting(model, L) for L in Ls)
+pw = Dict(L => node_based(refined[L], sc.network) for L in Ls)
+rows = map(Ls) do L
+    f = generate_pairwise(with_reinfection_counting(sis_model(), L), sc.network, BernoulliClosure(); cumulative = true)
+    (L, length(pw[L].singles), length(pw[L].pairs), vector_fields_equal(symbolic_ode(pw[L]), symbolic_ode(f)))
+end
+md_table(["L", "singles", "pairs", "node_based = generate_pairwise"], rows)
+```
+
+For L = 1 the system is small enough to read. S₀ holds the nodes that have never been infected
+and S₁ those that have recovered at least once:
+
+```{julia}
+symbolic_ode(pw[1])
+```
+
+The closure acts on the refined pairs, for example [S₀ S₀ I₁] ≈ K[S₀S₀][S₀I₁]/[S₀]. Summed over
+p, the refined singles are not the solution of the unrefined pairwise model, because the triples
+are closed at the refined level. The refinement therefore changes the prevalence curve, as the
+comparison below shows.
+
+## Against simulation
+
+The pairwise systems are solved on the scenario grid. The refined models are labelled with the
+representation `:reinfection`, so that the plots give each L its own colour; L = 0 keeps the
+pairwise style. Their prevalence is the sum over counts,
+I = Σ_p I_p (`reinfection_totals`), and their `:cumulative` accumulator counts the seeds and every
+infection, reinfections included. NetworkOutbreaks' `:cumulative` observable counts the same
+events, so for SIS it is the mean number of infections per node (it exceeds 1).
+
+The systems are integrated with the explicit Runge–Kutta method Tsit5 at the package's default
+tolerances (reltol 10⁻⁸, abstol 10⁻¹⁰); the numerical caveat below says why the default
+auto-switching solver is not used here.
+
+```{julia}
+using OrdinaryDiffEqDefault: Tsit5
+sols = Dict(L => solve_epidemic(pw[L], sc; initial = seed(L), solver = Tsit5()) for L in Ls)
+function lumped_curves(L)
+    tot = reinfection_totals(pw[L], sols[L])
+    cum = model_curves(pw[L], sols[L]; t = sc.tgrid)[:cumulative]
+    ModelCurves(sc.tgrid, Dict(:I => tot[:I], :S => tot[:S], :cumulative => cum);
+                label = "pairwise, L = $(L)", representation = L == 0 ? :pairwise : :reinfection)
+end
+dets = [lumped_curves(L) for L in Ls]
+ref = scenario_summary(sc)
+tab = compare(ref, dets; observables = [:I, :cumulative])
+```
+
+```{julia}
+describe_reference(ref);
+```
+
+```{julia}
+#| fig-cap: "Pairwise SIS models with reinfection counting (L = 0 is the plain pairwise model) against the committed NetworkOutbreaks ensemble of `:sis_reg3`, conditioned on survival (spread band q2.5–q97.5 of the runs; residual panel: mean band ±1.96 SE)."
+#| fig-height: 6
+distinct_styles!(comparisonplot(ref, dets...; observables = [:I, :cumulative]))
+```
+
+The table above is `compare` over the whole time course. Its ΔR∞ column is not a comparison of
+like with like for SIS. `compare` defines ΔR∞ as the model's `:cumulative` at t = 80 minus the
+mean of the ensemble's per-run final size, and for SIS that final size is the fraction of nodes
+*ever* infected:
+
+```{julia}
+fs = ref.final_size[ref.major]
+(; mean_fraction_ever_infected = sum(fs) / length(fs),
+   pairwise_cumulative_80 = dets[1][:cumulative][end],
+   ΔR∞_pairwise = tab[dets[1].label, :cumulative].ΔR∞)
+```
+
+The model's `:cumulative` counts every infection, reinfections included, so ΔR∞ is the mean number
+of infections per node minus the fraction ever infected, and it is large for every L. The like
+for like comparison of `:cumulative` is the `cumulative(80) − NO` column below, against the
+simulated mean of `:cumulative`. The comparisonplot's peak statistics are not meaningful on an
+endemic plateau either. The quantities that matter are the largest gap and the endemic level:
+
+```{julia}
+#| output: asis
+st, sc_cum = ref.cond[:I], ref.cond[:cumulative]
+md_table(["model", "D∞(I)", "t at D∞(I)", "I(80)", "I(80) − NO", "cumulative(80)", "cumulative(80) − NO"],
+         vcat([(c.label, tab[c.label, :I].D∞, tab[c.label, :I].t_D∞, c[:I][end], c[:I][end] - st.mean[end],
+                c[:cumulative][end], c[:cumulative][end] - sc_cum.mean[end]) for c in dets],
+              [("NetworkOutbreaks (mean ± SE)", NaN, NaN, st.mean[end], st.se[end], sc_cum.mean[end], sc_cum.se[end])]))
+```
+
+```{julia}
+#| echo: false
+D = [tab[c.label, :I].D∞ for c in dets]
+lumpgap = maximum(abs.(dets[2][:I] .- dets[1][:I]))
+nothing
+```
+
+The plain pairwise model (L = 0) misses the take-off by up to D∞(I) = `{julia} fmt(D[1])`.
+Counting a single infection (L = 1) brings this to `{julia} fmt(D[2])`, and L = 2, 3, 4 give
+`{julia} join(fmt.(D[3:end]), ", ")`. The lumped L = 1 prevalence differs from the plain pairwise
+prevalence by up to `{julia} fmt(lumpgap)`, which is the effect of closing the triples at the
+refined level. The first refinement does almost all the work. It separates the nodes that have
+never been infected, whose neighbourhoods are still close to those of an SIR epidemic, from the
+nodes that have recovered next to an infected neighbour. The endemic levels at t = 80 are the same for every L, `{julia} fmt(dets[1][:I][end])`: the refinement
+changes the approach to the endemic equilibrium, not the equilibrium. They are
+`{julia} fmt(dets[1][:I][end] - st.mean[end])` above the simulated level, which is
+`{julia} fmt((dets[1][:I][end] - st.mean[end]) / st.se[end])` standard errors of the simulated mean: a small
+bias of the pairwise closure at equilibrium. Counting infections also corrects most of the
+plain pairwise model's excess in the mean number of infections per node (the `cumulative(80)`
+column).
+
+The early phase, where the models differ:
+
+```{julia}
+#| fig-cap: "The first 30 time units of the figure above (prevalence; band: spread q2.5–q97.5 of the surviving runs)."
+p = plot(ref, :I; median = false, legend = :bottomright, xlabel = "t", ylabel = "I (fraction of nodes)",
+         title = "SIS on a 3-regular network: take-off")
+for c in dets
+    plot!(p, c, :I)
+end
+distinct_styles!(p)
+xlims!(p, 0, 30)
+```
+
+### A numerical caveat
+
+With the default solver of `solve_epidemic` (an automatic switch between non-stiff and stiff
+methods), for L = 4, the prevalence agrees with the Tsit5 solution but the `:cumulative`
+accumulator does not. The check integrates the accumulator's own
+right-hand side, τ Σ_{p,q}[S_p I_q], by the trapezoidal rule on the saved Tsit5 solution:
+
+```{julia}
+default4 = solve_epidemic(pw[4], sc; initial = seed(4))
+isSI(X, Y) = Set(base_compartment_of(refined[4], Z) for Z in (X, Y)) == Set([:S, :I])
+SIpairs = [v for ((X, Y), v) in pw[4].pairs if isSI(X, Y)]
+cumrate(sol) = [sc.params[:τ] * sum(sol[v][j] for v in SIpairs) for j in eachindex(sol.t)]
+r4 = cumrate(sols[4]); dt = step(sc.tgrid)
+quadrature = ρ + sum((r4[1:end-1] .+ r4[2:end]) ./ 2) * dt
+(; tsit5 = dets[5][:cumulative][end], default_solver = model_curves(pw[4], default4; t = sc.tgrid)[:cumulative][end],
+   trapezoid_on_tsit5 = quadrature,
+   max_prevalence_gap = maximum(abs.(reinfection_totals(pw[4], default4)[:I] .- dets[5][:I])))
+```
+
+The Tsit5 value agrees with the quadrature to within the trapezoidal error of the 0.25 grid,
+and the default solver's value does not. This is a defect of the default solver path for this
+system, reported to the package owners; the page does not depend on it.
+
+## Reinfection histograms
+
+The committed summary stores, for the end of the run (t = 80), the mean fraction of nodes that
+have been infected p times, over the surviving runs:
+
+```{julia}
+h = ref.extras[:reinfection_histogram]["cond"]
+(; t_end = last(sc.tgrid), buckets = length(h), total = sum(h), mode = argmax(h) - 1,
+   mean_infections = sum((p - 1) * h[p] for p in eachindex(h)), cumulative_mean = sc_cum.mean[end])
+```
+
+The mean of the histogram is the simulated `:cumulative` at t = 80, as it should be. By t = 80 the
+typical node has been infected `{julia} fmt(argmax(h) - 1)` times:
+
+```{julia}
+#| fig-cap: "Fraction of nodes infected p times by t = 80 (NetworkOutbreaks, mean over the surviving runs), and where the caps L = 1, …, 4 of the pairwise models fall."
+bar(0:length(h)-1, h; xlabel = "number of infections p", ylabel = "fraction of nodes", label = "NetworkOutbreaks",
+    title = "Reinfection histogram of :sis_reg3 at t = 80", legend = :topright)
+vline!([1, 2, 3, 4]; linestyle = :dash, color = :gray, label = "caps L = 1…4")
+```
+
+A model with cap L puts every node infected L or more times into the top class, so the right
+comparison is with the simulated histogram saturated at L. The model's fraction infected p times
+is [S_p] + [I_p]:
+
+```{julia}
+#| output: asis
+model_hist(L) = [sols[L][pw[L].singles[Symbol(:S_, q)]][end] +
+                 (haskey(pw[L].singles, Symbol(:I_, q)) ? sols[L][pw[L].singles[Symbol(:I_, q)]][end] : 0.0)
+                 for q in 0:L]
+saturated(L) = [q < L ? h[q+1] : sum(h[L+1:end]) for q in 0:L]
+rows = [(L, q, model_hist(L)[q+1], saturated(L)[q+1]) for L in 1:4 for q in 0:L]
+md_table(["L", "p (top class: p ≥ L)", "pairwise fraction", "NetworkOutbreaks fraction"], rows)
+```
+
+```{julia}
+#| echo: false
+low3 = (model_hist(4)[4], saturated(4)[4])
+resolution = 1 / (ref.N * ref.n_major)
+nothing
+```
+
+With L ≤ 4 this comparison can only test the lowest buckets. Almost every node has been infected
+at least four times, and the fraction infected exactly three times is
+`{julia} fmt(low3[1])` in the L = 4 model and `{julia} fmt(low3[2])` in the simulation. The
+smallest nonzero fraction the ensemble can resolve is 1/(N · runs) = `{julia} fmt(resolution)`.
+The mean of the whole histogram is compared through `:cumulative` in the table above.
+
+## Summary
+
+```{julia}
+#| output: asis
+md_table(["quantity", "value"],
+         [("pairwise threshold τ_c (τ/τ_c)", "$(fmt(a.τc)) ($(fmt(sc.params[:τ] / a.τc)))"),
+          ("D∞(I), plain pairwise (L = 0)", D[1]),
+          ("D∞(I), reinfection counting L = 1 / 4", "$(fmt(D[2])) / $(fmt(D[5]))"),
+          ("simulated I(80) ± SE", "$(fmt(st.mean[end])) ± $(fmt(st.se[end]))"),
+          ("simulated mean number of infections per node at t = 80", sc_cum.mean[end]),
+          ("pairwise L = 0 / L = 4 cumulative(80)", "$(fmt(dets[1][:cumulative][end])) / $(fmt(dets[5][:cumulative][end]))")])
+```
+
+No Lean statement is involved on this page. Page [N12](../N12_sis_comparison/index.qmd) puts the
+reinfection-counting models next to the motif and neighbourhood approximations.
+
+## References
+
+::: {#refs}
+:::

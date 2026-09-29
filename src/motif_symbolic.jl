@@ -8,10 +8,15 @@
 # `safe_ratio` semantics matter.
 #
 # Independence: this file does NOT call any of `_build_sis_k*_rhs` nor the
-# numeric RHS closures. It re-uses only the (closure-agnostic) layout helpers
+# numeric RHS closures. It re-uses the (closure-agnostic) layout helpers
 # `enumerate_shapes`, `enumerate_state_classes`, `canonical_state` and
-# `_build_variables`. The closure rules and pair-/singleton-derivative
-# assembly are independently re-derived in symbolic form below.
+# `_build_variables`, and the pair-/singleton-derivative assembly is
+# re-derived in symbolic form below. For (k, m) = (3, 4) it also re-uses the
+# numeric closure registry `_CLOSURE_RULES_4V` and `_kirkwood_completions`, so
+# there the validator checks the assembly (flows, orbit/stabiliser bookkeeping,
+# the 3-from-4 map) but NOT the closure structure itself; the independent
+# oracles of the (3, 4) closure are the master-equation tests in
+# test/suites/motif.jl.
 #
 # Closure registry (selected via `closure_kind`):
 #
@@ -21,15 +26,22 @@
 #                             • P_2  (any k):  Keeling κ-corrected,
 #                                              flow_ext = β · κ · L_σ ·
 #                                              L_(σ_v, I) / ⟨σ_v⟩  (κ=(k-1)/k)
-#                             • P_3  k=2     : raw Markov pair-closure (NO κ
-#                                              factor; matches the specialised
-#                                              m=3 builder which uses the
-#                                              lower-order Kirkwood
-#                                              L_σ · L_(I,σ_1) / ⟨σ_1⟩)
+#                             • P_3  k=2     : single-vertex anchor with the
+#                                              slot factor n_ext/k = 1/2 at
+#                                              each end (the specialised m=3
+#                                              builder: L_σ · L_(σ_1,I) /
+#                                              (2⟨σ_1⟩); VERIFIED_ISSUES B05
+#                                              follow-up, WP37)
 #                             • P_3  k=3     : per-vertex slot factor
 #                                              (n_ext_i / k); endpoints get
 #                                              (k-1)/k, middle gets (k-2)/k
 #                             • C_3          : (k-2)/k · paw closure
+#                             • 4-vertex shapes (k=3, m=4): per-shape
+#                                              Kirkwood on the registry's
+#                                              3-vertex anchor, summed over
+#                                              every completion of the anchor
+#                                              by the external neighbour, with
+#                                              NO slot factor
 #                             • P_m  m ≥ 4 (k=2): generalised order-m chain
 #                                              Kirkwood at endpoints; middle
 #                                              vertices have n_ext = 0 on a
@@ -141,17 +153,13 @@ function _closure_flow_ext(closure_kind::Symbol, k::Int, m::Int,
             Lσ_sym * Lpair_sym(σ[i], :I), single_sym(σ[i]))
 
     elseif name === :P3
-        if k == 2
-            # Specialised m=3 builder: lower-order Kirkwood, no slot factor.
-            # (Endpoints only — middle has n_ext = 0 on k=2 ring, handled by
-            # the short-circuit above.)
-            return β_sym * safe_ratio_sym(
-                Lσ_sym * Lpair_sym(σ[i], :I), single_sym(σ[i]))
-        else
-            slot = n_ext / k  # endpoint: (k-1)/k; middle: (k-2)/k
-            return β_sym * slot * safe_ratio_sym(
-                Lσ_sym * Lpair_sym(σ[i], :I), single_sym(σ[i]))
-        end
+        # Single-vertex anchor: L_σ · L_(σᵢ,I)/⟨σᵢ⟩ counts all k neighbours of
+        # vertex i, of which n_ext are outside the motif, hence the slot factor.
+        # k = 2: endpoints (k-1)/k = 1/2 (the middle has n_ext = 0 on a ring,
+        # handled by the short-circuit above); k = 3: endpoints 2/3, middle 1/3.
+        slot = n_ext / k
+        return β_sym * slot * safe_ratio_sym(
+            Lσ_sym * Lpair_sym(σ[i], :I), single_sym(σ[i]))
 
     elseif name === :C3
         slot = n_ext / k  # = (k-2)/k for any C_3 vertex
@@ -163,33 +171,33 @@ function _closure_flow_ext(closure_kind::Symbol, k::Int, m::Int,
            (name === :P4 && k == 3)
         # Phase B(c) — per-shape higher-order Kirkwood closure on the
         # 5-vertex motif (e + σ). For each (shape, ext_vertex) we drop
-        # a chosen vertex w (typically diametrically opposite to the
-        # extension vertex i) and factorise as
+        # a chosen vertex w (never adjacent to the extension vertex i)
+        # and factorise as
         #
-        #   L_(e=I, σ) ≈ L_(σ-{w}∪{e=I}) · L_σ / L_(σ-{w})
+        #   L_(e=I, σ) ≈ Σ_c L_c(σ-{w}, e=I) · L_σ / L_(σ-{w})
         #
-        # σ-{w} is always a tracked 3-vertex shape (P_3 or C_3) and
-        # σ-{w}∪{e} is always a tracked 4-vertex shape (P_4, K_{1,3},
-        # paw or C_4). The drop vertex w and the resulting state
-        # permutations come from `_CLOSURE_RULES_4V` in
-        # `motif_based.jl` (we re-use that registry directly so the
-        # symbolic and numeric closures stay in lockstep). The
-        # resulting flow is
+        # σ-{w} is always a tracked 3-vertex shape (P_3 or C_3); c runs
+        # over the completions of that anchor by an external neighbour e
+        # of i (`_kirkwood_completions`: e adjacent to i only, or also to
+        # one or both other anchor vertices). The drop vertex w and the
+        # state permutations come from `_CLOSURE_RULES_4V` in
+        # `motif_based.jl` (re-used so the symbolic and numeric closures
+        # stay in lockstep; see the independence note at the top). The
+        # flow has NO slot factor, since Σ_c L_c / L_anchor already counts
+        # the external neighbours of i (VERIFIED_ISSUES B05):
         #
-        #   flow_ext = β · (n_ext_i / k) · safe_ratio(L_4target · L_σ,
-        #                                              L_3target)
+        #   flow_ext = β · safe_ratio(Σ_c L_c · L_σ, L_3target)
         rule = get(_CLOSURE_RULES_4V, (name, i), nothing)
         rule === nothing && error(
             "motif_symbolic: missing Kirkwood closure rule for ($name, $i)")
         target3_sh = _shape_by_name(rule.target3)
-        target4_sh = _shape_by_name(rule.target4)
         state3 = Symbol[σ[rule.perm3[1]], σ[rule.perm3[2]], σ[rule.perm3[3]]]
-        state4 = Symbol[rule.perm4[j] == 0 ? :I : σ[rule.perm4[j]]
-                        for j in 1:4]
         L3 = _Lsym_of(target3_sh, state3, idx, u_sym)
-        L4 = _Lsym_of(target4_sh, state4, idx, u_sym)
-        slot = n_ext / k
-        return β_sym * slot * safe_ratio_sym(L4 * Lσ_sym, L3)
+        L4 = sum(begin
+                     state4 = Symbol[perm4[j] == 0 ? :I : σ[perm4[j]] for j in 1:4]
+                     _Lsym_of(_shape_by_name(target4), state4, idx, u_sym)
+                 end for (target4, perm4) in _kirkwood_completions(sh, i, rule))
+        return β_sym * safe_ratio_sym(L4 * Lσ_sym, L3)
 
     elseif name === :P4 || name === :P5 || name === :P6 ||
            startswith(string(name), "P")
@@ -306,7 +314,8 @@ end
 """
     build_motif_symbolic_rhs(closure::MotifClosure;
                              model = :sis,
-                             closure_kind = :auto)
+                             closure_kind = :auto,
+                             multiplicities = (P3 = 5.0, C3 = 3.0))
         → (rhs!::Function, var_keys::Vector{Tuple{Symbol,Vector{Symbol}}},
            params::NTuple{2,Symbolics.Num})
 
@@ -326,11 +335,21 @@ an oracle.
 
 Currently `model = :sis` is the only supported model. Supported
 `(closure.k, closure.m)` pairs are those for which `enumerate_shapes`
-returns a non-error: k=2 with 2 ≤ m ≤ 6 and k=3 with m ∈ {2, 3}.
+returns a non-error: k=2 with 2 ≤ m ≤ 6 and k=3 with m ∈ {2, 3, 4}.
+
+`multiplicities` are the divisors of the 3-from-4 map at (k, m) = (3, 4):
+the mean numbers of connected induced 4-vertex supersets of an induced `P_3`
+and `C_3` on the host. The defaults are the asymptotic random 3-regular values;
+to compare with `motif_based_sis(3, 4; n_p3, n_c3, …)` on a host with supplied
+motif counts pass `NodeBasedModels._mat_3from4_multiplicities(; counts...)`,
+which is what the numeric builder uses. The (3, 4) closure registry is shared
+with the numeric code, so there the oracle checks the assembly, not the closure
+itself.
 """
 function build_motif_symbolic_rhs(closure::MotifClosure;
                                   model::Symbol = :sis,
-                                  closure_kind::Symbol = :auto)
+                                  closure_kind::Symbol = :auto,
+                                  multiplicities = _MULT_3FROM4_ASYMPTOTIC)
     model === :sis ||
         throw(ArgumentError("build_motif_symbolic_rhs: only model=:sis is supported (got :$model)"))
     closure_kind === :auto ||
@@ -457,7 +476,11 @@ function build_motif_symbolic_rhs(closure::MotifClosure;
     if skip_p3c3_in_loop
         # Per-shape lookup for the 3-vertex target shape.
         _sh3_for(name::Symbol) = (name === :P3) ? _P3_SHAPE : _C3_SHAPE
-        ext_for = Dict(:P3 => 5, :C3 => 3)
+        ext_for = Dict(:P3 => Float64(multiplicities.P3),
+                       :C3 => Float64(multiplicities.C3))
+        (ext_for[:P3] > 0 && ext_for[:C3] > 0) || throw(ArgumentError(
+            "build_motif_symbolic_rhs: multiplicities must be positive " *
+            "(got $(multiplicities))"))
         # Locally enumerate connected 3-subsets per 4-vertex shape.
         function specs_of(sh4::MotifShape)
             specs = Tuple{Symbol, NTuple{3,Int}}[]

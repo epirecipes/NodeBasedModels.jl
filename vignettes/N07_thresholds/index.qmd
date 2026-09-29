@@ -1,0 +1,223 @@
+---
+title: "Thresholds and R₀: SIR versus SIS"
+subtitle: "NodeBasedModels.jl vignette N07: the epidemic thresholds of the pairwise SIR and SIS models, the generation-based R₀ and the growth-based threshold ratio"
+---
+
+An SIR epidemic and an SIS epidemic on the same network have different thresholds. In SIR a recovered node is
+immune, so the partner that infected a node is no longer susceptible; in SIS it recovers to S and can be
+re-infected by the node it infected. The pairwise model sees this difference in its [II] → [SI] recovery term, and
+the two thresholds differ: on a k-regular network with the Bernoulli closure,
+
+$$
+\tau_c^{\mathrm{SIR}} = \frac{\gamma}{k-2}, \qquad \tau_c^{\mathrm{SIS}} = \frac{\gamma}{k-1},
+$$
+
+and on a configuration network with q = ⟨k(k − 1)⟩/⟨k⟩ they are γ/(q − 1) and γ/q [@keeling1999; @kiss2017]. This
+page derives both from the linearised pairwise equations, checks them against NodeBasedModels' `epidemic_threshold`
+and against the ODEs, and separates two quantities that are both called "R₀": the generation-based R₀ = T·κ_ex of
+NetworkEpiCore, defined only for models inside T_EB, and the growth-based threshold ratio of the pairwise model.
+There is no simulation on this page.
+
+```{julia}
+#| label: setup
+#| output: false
+include(joinpath(@__DIR__, "..", "_shared", "setup.jl"))
+using NetworkEpiCore, Catalyst, Plots
+using LinearAlgebra
+```
+
+## The two models, twice
+
+```{julia}
+sir_rn = @reaction_network sir begin
+    @parameters τ γ
+    τ, S + I --> 2I
+    γ, I --> R
+end
+sis_rn = @reaction_network sis begin
+    @parameters τ γ
+    τ, S + I --> 2I
+    γ, I --> S
+end
+m_sir = contact_model(sir_rn)
+m_sis = contact_model(sis_rn)
+sc6 = scenario(:sir_reg6)          # SIR, 6-regular, τ = 1/6, γ = 1/4
+sc3 = scenario(:sis_reg3)          # SIS, 3-regular, τ = 1/2, γ = 1/4
+@assert isequivalent(m_sir, sc6.model) && isequivalent(m_sis, sc3.model)
+net6, net3 = sc6.network, sc3.network
+sys6  = node_based(m_sir, net6)
+sys6F = generate_pairwise(sir_model(), net6, BernoulliClosure(); cumulative = true)
+@assert vector_fields_equal(symbolic_ode(sys6), symbolic_ode(sys6F))
+sys3  = node_based(m_sis, net3)
+sys3F = generate_pairwise(sis_model(), net3, BernoulliClosure(); cumulative = true)
+@assert vector_fields_equal(symbolic_ode(sys3), symbolic_ode(sys3F))
+m_sis
+```
+
+SIS is outside the edge-based theory T_EB (the recovery produces the susceptible species), so NetworkEpiCore's
+generation-based R₀ is not defined for it; the pairwise model is:
+
+```{julia}
+println(try basic_reproduction_number(m_sis, net3, sc3.params) catch e; join(first(split(sprint(showerror, e), '\n'), 2), '\n') end)
+symbolic_ode(sys3)
+```
+
+## Linearising at the disease-free state
+
+On a k-regular network with the Bernoulli closure [A S B] = ((k − 1)/k)[AS][SB]/[S], near the disease-free state
+([S] ≈ 1, [SS] ≈ k) the triple [S S I] ≈ (k − 1)[SI] and [I S I] is quadratic. The infected pairs then follow a
+linear system. For SIS, recovery of either end of an [II] pair creates an [SI] pair:
+
+$$
+\frac{d}{dt}\begin{pmatrix}[SI]\\ [II]\end{pmatrix} =
+\begin{pmatrix}\tau(k-2)-\gamma & \gamma\\ 2\tau & -2\gamma\end{pmatrix}
+\begin{pmatrix}[SI]\\ [II]\end{pmatrix},
+$$
+
+while for SIR the recovered end of an [II] pair is an R, so the γ above the diagonal is absent and [SI] grows at
+rate τ(k − 2) − γ. The SIR threshold is τ(k − 2) = γ; the SIS threshold is where the determinant vanishes,
+2γ(γ − τ(k − 2)) = 2γτ, i.e. τ(k − 1) = γ. Symbolically:
+
+```{julia}
+using Symbolics
+@variables τ γ k
+J_sis = [τ * (k - 2) - γ  γ; 2τ  -2γ]
+J_sir = [τ * (k - 2) - γ  0; 2τ  -2γ]
+det2(J) = J[1, 1] * J[2, 2] - J[1, 2] * J[2, 1]
+println("SIS: det J = ", simplify(expand(det2(J_sis))), ";  det J + 2γ(τ(k − 1) − γ) = ",
+        simplify(expand(det2(J_sis) + 2γ * (τ * (k - 1) - γ))))
+println("SIR: J is triangular, eigenvalues ", J_sir[1, 1], " and ", J_sir[2, 2])
+```
+
+## Against `epidemic_threshold`
+
+NodeBasedModels reads the dynamics from the model (strictly SIR or strictly SIS) and returns τ_c for the given
+network and closure:
+
+```{julia}
+#| output: asis
+γ0 = 0.25
+rows = map(3:8) do n
+    net = ConfigurationNetwork(RegularDegree(n))
+    p = Dict(:τ => 0.1, :γ => γ0)
+    (n, epidemic_threshold(sir_model(), net, BernoulliClosure(); p), γ0 / (n - 2),
+     epidemic_threshold(sis_model(), net, BernoulliClosure(); p), γ0 / (n - 1))
+end
+md_table(["k", "τ_c SIR", "γ/(k − 2)", "τ_c SIS", "γ/(k − 1)"], rows)
+```
+
+On heterogeneous configuration networks the same holds with q = ⟨k(k − 1)⟩/⟨k⟩ (the excess degree) in place of
+k − 1:
+
+```{julia}
+#| output: asis
+hrows = map([("Poisson(5)", PoissonDegree(5)), ("negative binomial, mean 4, variance 8", NegBinDegree(mean = 4, var = 8)),
+              ("bimodal {2: 5/6, 10: 1/6}", EmpiricalDegree(2 => 5 / 6, 10 => 1 / 6))]) do (name, d)
+    net = ConfigurationNetwork(d); q = excess_degree(net); p = Dict(:τ => 0.1, :γ => γ0)
+    (name, q, epidemic_threshold(sir_model(), net, BernoulliClosure(); p), γ0 / (q - 1),
+     epidemic_threshold(sis_model(), net, BernoulliClosure(); p), γ0 / q)
+end
+md_table(["degrees", "q", "τ_c SIR", "γ/(q − 1)", "τ_c SIS", "γ/q"], hrows)
+```
+
+## The scenario anchors
+
+`anchors` prints each scenario's parameters and thresholds. `:sir_reg6` sits at τ/τ_c = 8/3 with R₀ = 2;
+`:sis_reg3` has no edge-based R₀, and τ/τ_c = 4 is its threshold quantity:
+
+```{julia}
+a6 = anchors(sc6)
+a3 = anchors(sc3)
+@printf("SIR on 6-regular: τ_c = %.4f = γ/(k − 2) = %.4f;  SIS on 3-regular: τ_c = %.4f = γ/(k − 1) = %.4f\n",
+        a6.τc, sc6.params[:γ] / 4, a3.τc, sc3.params[:γ] / 2)
+@printf("on 3-regular, the SIR formula would give τ_c = %.4f, twice the SIS value\n",
+        epidemic_threshold(sir_model(), net3, BernoulliClosure(); p = sc3.params))
+```
+
+## The thresholds in the ODEs
+
+The early growth rate r of the pairwise model changes sign at τ_c. NodeBasedModels computes it from the linearised
+system; the log-slope of [I] in a solution from a small seed gives the same number, and the sign flips between
+0.9τ_c and 1.1τ_c:
+
+```{julia}
+#| output: asis
+function logslope(sys, p, ρ, t1, t2)
+    sol = solve_epidemic(sys; p, initial = SeedFraction(:I => ρ), tspan = (0.0, t2), saveat = [t1, t2],
+                         reltol = 1e-10, abstol = 1e-14)
+    I = compartment(sys, sol, :I)
+    log(I[end] / I[1]) / (t2 - t1)
+end
+ns3 = network_structure(net3)
+trows = []
+for (name, m, net, sys) in (("SIR, 3-regular", m_sir, net3, node_based(m_sir, net3)),
+                            ("SIS, 3-regular", m_sis, net3, sys3))
+    dyn = name[1:3] == "SIR" ? :SIR : :SIS
+    τc = epidemic_threshold(m, net, BernoulliClosure(); p = sc3.params)
+    for f in (0.9, 1.1, 2.0)
+        τv = f * τc
+        r = early_growth_rate(ns3, BernoulliClosure(), τv, sc3.params[:γ]; dynamics = dyn)
+        push!(trows, (name, f, τv, r, logslope(sys, Dict(:τ => τv, :γ => sc3.params[:γ]), 1e-8, 20.0, 40.0)))
+    end
+end
+md_table(["model", "τ/τ_c", "τ", "early_growth_rate", "log-slope of [I] on t ∈ [20, 40]"], trows)
+```
+
+```{julia}
+#| label: fig-growth
+#| fig-cap: "Early growth rate of the pairwise SIR and SIS models on the 3-regular network (γ = 1/4) against τ; the vertical lines are τ_c = γ/(k − 2) and γ/(k − 1)."
+#| fig-height: 4.2
+τs = range(0.02, 0.6; length = 200)
+plt = plot(τs, [early_growth_rate(ns3, BernoulliClosure(), t, 0.25; dynamics = :SIR) for t in τs]; label = "SIR",
+           xlabel = "τ", ylabel = "early growth rate r")
+plot!(plt, τs, [early_growth_rate(ns3, BernoulliClosure(), t, 0.25; dynamics = :SIS) for t in τs]; label = "SIS")
+hline!(plt, [0.0]; color = :black, lw = 1, label = "")
+vline!(plt, [0.25, 0.125]; ls = :dash, color = [1 2], label = ["γ/(k − 2)" "γ/(k − 1)"])
+plt
+```
+
+## Two different "R₀"
+
+For SIR the generation-based R₀ of NetworkEpiCore is R₀ = T·κ_ex with T = τ/(τ + γ): the mean number of neighbours
+an infected node infects, early in the epidemic. NodeBasedModels' `basic_reproduction_number` of a pairwise model
+is a different quantity, the growth-based threshold ratio R = 1 + r/γ, which is τ(k − 2)/γ for SIR on a k-regular
+network. Both equal 1 at τ_c and both exceed 1 above it, but they are not equal elsewhere:
+
+```{julia}
+#| output: asis
+ns6 = network_structure(net6)
+rrows = map((0.5, 1.0, 1.5, 8 / 3)) do f
+    τv = f * sc6.params[:γ] / 4
+    p = Dict(:τ => τv, :γ => sc6.params[:γ])
+    (f, τv, basic_reproduction_number(m_sir, net6, p), basic_reproduction_number(ns6, BernoulliClosure(), τv, p[:γ]; dynamics = :SIR))
+end
+md_table(["τ/τ_c", "τ", "generation-based R₀ = T·κ_ex (NEC)", "growth-based R = 1 + r/γ (NBM)"], rrows)
+```
+
+At the anchors of `:sir_reg6` the generation-based R₀ is `{julia} fmt(a6.R0)` while the growth-based ratio is
+`{julia} fmt(basic_reproduction_number(ns6, BernoulliClosure(), sc6.params[:τ], sc6.params[:γ]; dynamics = :SIR))`.
+The two agree on the threshold, which is what either can be used for; only the generation-based R₀ is the number
+of secondary infections. The next-generation matrix of the SIR model (a single entry state, so it has rank one and
+R₀ is its only non-zero eigenvalue) gives the same R₀:
+
+```{julia}
+K = next_generation_matrix(m_sir, net6, sc6.params)
+@printf("NGM = %s;  spectral radius %.6f;  T·κ_ex = %.6f\n", repr(round.(K; digits = 6)),
+        maximum(abs.(eigvals(K))), transmissibility(m_sir, net6, sc6.params) * excess_degree(net6))
+```
+
+For SIS NodeBasedModels' ratio has its own formula, R = (a + √((2γ − a)² + 8γ(a + τ)))/(2γ) with
+a = τ(k − 2) − γ, from the leading eigenvalue of the 2 × 2 system above:
+
+```{julia}
+R3 = basic_reproduction_number(ns3, BernoulliClosure(), sc3.params[:τ], sc3.params[:γ]; dynamics = :SIS)
+r3 = early_growth_rate(ns3, BernoulliClosure(), sc3.params[:τ], sc3.params[:γ]; dynamics = :SIS)
+τ3, γ3 = sc3.params[:τ], sc3.params[:γ]; a = τ3 * (3 - 2) - γ3
+@printf(":sis_reg3: R = %.4f (formula %.4f), r = %.4f, R = 1 + r/γ = %.4f;  τ/τ_c = %.4f\n", R3,
+        (a + sqrt((2γ3 - a)^2 + 8γ3 * (a + τ3))) / (2γ3), r3, 1 + r3 / γ3, τ3 / a3.τc)
+```
+
+## References
+
+::: {#refs}
+:::

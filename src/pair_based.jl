@@ -1,4 +1,4 @@
-# pair_based.jl — Order-2 moment closure: pair-based model
+# pair_based.jl — Order-2 moment closure: pair-based model (owner: WP24)
 #
 # Per-node AND per-edge ODEs on a specific graph (Sharkey 2008, 2011).
 # Node variables: ⟨S_i⟩, ⟨I_i⟩ for each node
@@ -29,7 +29,8 @@ Result container for pair-based (order-2) model on a graph.
 - `n_directed_edges` — number of directed edges (2 × undirected edges)
 - `directed_edges` — list of (i,j) pairs
 - `edge_index` — Dict mapping (i,j) → edge index
-- `model` — original CompartmentalModel
+- `model` — the `CompartmentalModel` that was solved (a `ContactModel` is lowered with
+  `CompartmentalModel(cm)`)
 """
 struct PairBasedResult
     sol::Any
@@ -49,16 +50,24 @@ end
 """
     node_state(result::PairBasedResult, i, state, t_idx)
 
-Get the probability that node `i` is in compartment `state` at time index `t_idx`.
+Get the probability that node `i` is in compartment `state` (`:S`, `:I` or `:R`) at time index
+`t_idx`. Any other `state` is an `ArgumentError` (0.1 returned the R probability for it).
 """
 function node_state(r::PairBasedResult, i::Int, state::Symbol, t_idx::Int)
     if state == :S
         return r.sol[2*(i-1)+1, t_idx]
     elseif state == :I
         return r.sol[2*(i-1)+2, t_idx]
-    else  # :R (derived)
-        return 1.0 - r.sol[2*(i-1)+1, t_idx] - r.sol[2*(i-1)+2, t_idx]
     end
+    _check_pb_state(r, state)   # :R, derived
+    return 1.0 - r.sol[2*(i-1)+1, t_idx] - r.sol[2*(i-1)+2, t_idx]
+end
+
+function _check_pb_state(r::PairBasedResult, state::Symbol)
+    state === last(r.model.compartment_names) || throw(ArgumentError(
+        "unknown compartment $(state); the compartments of the pair-based model are " *
+        "$(join(r.model.compartment_names, ", "))"))
+    return nothing
 end
 
 """
@@ -67,17 +76,57 @@ end
 Aggregate a state across all nodes. Returns a vector over time points.
 """
 function aggregate(r::PairBasedResult, state::Symbol)
+    state in (:S, :I) || _check_pb_state(r, state)
     nt = length(r.sol.t)
     [sum(node_state(r, i, state, ti) for i in 1:r.N) for ti in 1:nt]
 end
 
+"""
+    compartment(r::PairBasedResult, state) -> Vector{Float64}
+
+The expected number of nodes in `state` (`:S`, `:I` or `:R`) over the saved times.
+"""
 compartment(r::PairBasedResult, state::Symbol) = aggregate(r, state)
 
+"""
+    compartments(r::PairBasedResult, states) -> Dict{Symbol,Vector{Float64}}
+
+[`compartment`](@ref) for several states, keyed by name.
+"""
 function compartments(r::PairBasedResult, states::AbstractVector{Symbol})
     return Dict(state => compartment(r, state) for state in states)
 end
 
+"""
+    population_fraction(r::PairBasedResult, state) -> Vector{Float64}
+
+The expected fraction of the nodes in `state` over the saved times.
+"""
 population_fraction(r::PairBasedResult, state::Symbol) = aggregate(r, state) ./ r.N
+
+"""
+    model_curves(r::PairBasedResult, sol = r.sol; t = sol.t, label = "pair") -> ModelCurves
+
+The expected population fractions of S, I and R and `:infectious` (= I) on the time grid `t`,
+as a `NetworkEpiCore.ModelCurves` with representation `:pair`.
+"""
+function model_curves(r::PairBasedResult, sol = r.sol; t = sol.t, label::AbstractString = "pair")
+    tt = collect(Float64, t)
+    S = zeros(length(tt))
+    I = zeros(length(tt))
+    for (m, ti) in enumerate(tt)
+        u = sol(ti)                      # once per time point
+        for i in 1:r.N
+            S[m] += u[2*(i-1)+1]
+            I[m] += u[2*(i-1)+2]
+        end
+    end
+    S ./= r.N
+    I ./= r.N
+    vals = Dict{Symbol,Vector{Float64}}(:S => S, :I => I, :R => 1 .- S .- I, :infectious => I)
+    return ModelCurves(tt, vals; label, representation = :pair,
+                       metadata = Dict{Symbol,Any}(:N => r.N))
+end
 
 """
     pair_prob(result, i, j, a, b, t_idx)
@@ -119,6 +168,7 @@ function _supports_pair_based_sir(model::CompartmentalModel)
         length(spon_trans) == 1 &&
         inf_trans[1].from == :S &&
         inf_trans[1].to == :I &&
+        infectors(model, inf_trans[1]) == [:I] &&
         spon_trans[1].from == :I &&
         spon_trans[1].to == :R
 end
@@ -135,7 +185,10 @@ function _validate_pair_based_setup(model::CompartmentalModel,
 end
 
 """
-    generate_pair_based(model, net; kwargs...)
+    generate_pair_based(model, net; p = nothing, closure = KirkwoodClosure(), tspan = (0.0, 100.0),
+                        initial_infected = nothing, initial = nothing, seed_fraction = 1e-3,
+                        saveat = 1.0, reltol = nothing, abstol = nothing,
+                        infection_rate = nothing, recovery_rate = nothing)
 
 Generate and solve the order-2 (pair-based) ODE system on a specific graph.
 Uses Kirkwood triple closure: ⟨A_k B_i C_j⟩ ≈ [A_kB_i][B_iC_j]/⟨B_i⟩.
@@ -145,18 +198,25 @@ Exact on tree graphs; errors proportional to the density of 3-cycles
 (triangles).
 
 # Arguments
-- `model::CompartmentalModel` — must be SIR
-- `net::GraphNetwork` — graph with transmission rates
+- `model` — the SIR model: `sir_model()` (a `ContactModel`) or its `CompartmentalModel`
+- `net` — a NetworkEpiCore `ExplicitGraph` or a `GraphNetwork` (an explicit transmission matrix
+  `T[i, j]`, the rate from node j to node i, replaces the per-contact rate τ)
 
 # Keyword Arguments
+- `p` — the rate values by name, e.g. `Dict(:τ => 0.3, :γ => 0.25)` (a key that is not a rate
+  parameter of the model is an error)
+- `infection_rate`, `recovery_rate` — the 0.1 keywords for τ and γ (defaults 0.5 and 0.1 when
+  neither they nor `p` are given)
 - `closure` — triple closure method (must be `KirkwoodClosure()`)
 - `tspan` — time span (default: (0.0, 100.0))
-- `infection_rate` — per-edge transmission rate τ (default: 0.5)
-- `recovery_rate` — recovery rate γ (default: 0.1)
-- `initial_infected` — vector of initially infected node indices
+- `initial_infected` — nodes that start infected (I); the others start in S
+- `initial` — alternatively `NetworkEpiCore.SeedNodes(:I => [1, 2])` or `SeedFraction(:I => ρ)`
+  (with S the only other compartment allowed)
 - `ε` — backward-compatible alias for `seed_fraction`
-- `seed_fraction` — fraction of random initial infected if `initial_infected` is nothing
+- `seed_fraction` — probability that each node starts infected when neither `initial_infected`
+  nor `initial` is given
 - `saveat` — time points to save solution (default: 1.0)
+- `reltol`, `abstol` — solver tolerances (the solver defaults if `nothing`)
 
 # Returns
 `PairBasedResult` containing the ODE solution and metadata.
@@ -172,20 +232,31 @@ Exact on tree graphs; errors proportional to the density of 3-cycles
 """
 function generate_pair_based(model::CompartmentalModel,
                               net::GraphNetwork;
+                              p::Union{Nothing,AbstractDict} = nothing,
                               closure = KirkwoodClosure(),
                               tspan::Tuple{Real,Real} = (0.0, 100.0),
-                              infection_rate::Float64 = 0.5,
-                              recovery_rate::Float64 = 0.1,
-                              initial_infected::Union{Vector{Int}, Nothing} = nothing,
-                              ε::Float64 = 1e-3,
-                              seed_fraction::Float64 = ε,
-                              saveat::Float64 = 1.0)
+                              infection_rate::Union{Nothing,Real} = nothing,
+                              recovery_rate::Union{Nothing,Real} = nothing,
+                              initial_infected::Union{Nothing,AbstractVector{<:Integer}} = nothing,
+                              initial::Union{Nothing,SeedSpec} = nothing,
+                              ε::Real = 1e-3,
+                              seed_fraction::Real = ε,
+                              saveat::Real = 1.0,
+                              reltol::Union{Nothing,Real} = nothing,
+                              abstol::Union{Nothing,Real} = nothing)
     _validate_pair_based_setup(model, net, closure)
+    builder = "generate_pair_based(:$(model.name))"
 
     g = net.graph
     N = nv(g)
-    γ = recovery_rate
-    T = _effective_transmission_matrix(net, infection_rate)
+    rates = _graph_rate_values(model, p, infection_rate, recovery_rate, builder;
+                               infections_needed = isnothing(net.transmission_matrix))
+    all(r -> r isa Float64, rates) || throw(ArgumentError(
+        "$builder: the pair-based builder needs constant rates; the model has a time-dependent " *
+        "rate"))
+    τ = rates[findfirst(tr -> tr.type === :infection, model.transitions)]
+    γ = rates[findfirst(tr -> tr.type === :spontaneous, model.transitions)]
+    T = _effective_transmission_matrix(net, τ)
 
     # Enumerate directed edges: for each undirected edge {i,j}, create (i,j) and (j,i)
     directed_edges = Tuple{Int,Int}[]
@@ -202,6 +273,7 @@ function generate_pair_based(model::CompartmentalModel,
     edge_rates = [T[i, j] for (i, j) in directed_edges]
 
     adj = [neighbors(g, i) for i in 1:N]
+    node_edges = [[edge_idx[(i, j)] for j in adj[i]] for i in 1:N]   # edge ids of (i, j), j ∈ N(i)
 
     # Precompute neighbor lists excluding specific nodes for each directed edge
     ni_exc_j = Vector{Vector{Int}}(undef, M)
@@ -236,9 +308,8 @@ function generate_pair_based(model::CompartmentalModel,
                 i_idx = 2*(i-1) + 2
 
                 # Sum of [SI_ij] over j ∈ N(i)
-                sum_SI = 0.0
-                for j in adj[i]
-                    e_ij = edge_idx[(i,j)]
+                sum_SI = zero(eltype(u))
+                for e_ij in node_edges[i]
                     sum_SI += edge_rates[e_ij] * u[2*N + 2*(e_ij-1) + 2]
                 end
 
@@ -260,7 +331,7 @@ function generate_pair_based(model::CompartmentalModel,
 
                 # Infection pressure on i from neighbors k ≠ j (Kirkwood closure):
                 #   Q_i^{-j} = Σ_{k∈N(i)\{j}} [SI]_ik / S_i
-                pressure_i = 0.0
+                pressure_i = zero(eltype(u))
                 for edge in si_ik_edges[e]
                     pressure_i += edge_rates[edge] * u[2*N + 2*(edge-1) + 2]
                 end
@@ -268,7 +339,7 @@ function generate_pair_based(model::CompartmentalModel,
 
                 # Infection pressure on j from neighbors k ≠ i:
                 #   Q_j^{-i} = Σ_{k∈N(j)\{i}} [SI]_jk / S_j
-                pressure_j = 0.0
+                pressure_j = zero(eltype(u))
                 for edge in si_jk_edges[e]
                     pressure_j += edge_rates[edge] * u[2*N + 2*(edge-1) + 2]
                 end
@@ -284,37 +355,29 @@ function generate_pair_based(model::CompartmentalModel,
         nothing
     end
 
-    # Initial conditions
+    # Initial conditions: independent nodes, so every pair probability is the product of the
+    # node probabilities (exact for the deterministic node lists, and the 0.1 formulas
+    # (1 − ρ)², (1 − ρ)ρ for uniform seeding).
+    x = _graph_initial_state(model, N, initial_infected, initial, seed_fraction, :entry, builder)
+    for i in 1:N
+        all(X -> X in (:S, :I) || x[i][X] == 0, keys(x[i])) || throw(ArgumentError(
+            "$builder: the pair-based model tracks S and I; every node must start in S or I"))
+    end
+    s0 = [get(x[i], :S, 0.0) for i in 1:N]
+    i0 = [get(x[i], :I, 0.0) for i in 1:N]
     u0 = zeros(n_vars)
-    if !isnothing(initial_infected)
-        inf_set = Set(initial_infected)
-        for i in 1:N
-            if i in inf_set
-                u0[2*(i-1)+2] = 1.0  # I_i = 1
-            else
-                u0[2*(i-1)+1] = 1.0  # S_i = 1
-            end
-        end
-        for (e, (i,j)) in enumerate(directed_edges)
-            s_i = i ∉ inf_set ? 1.0 : 0.0
-            s_j = j ∉ inf_set ? 1.0 : 0.0
-            i_j = j ∈ inf_set ? 1.0 : 0.0
-            u0[2*N + 2*(e-1) + 1] = s_i * s_j       # SS_ij
-            u0[2*N + 2*(e-1) + 2] = s_i * i_j        # SI_ij
-        end
-    else
-        for i in 1:N
-            u0[2*(i-1)+1] = 1.0 - seed_fraction
-            u0[2*(i-1)+2] = seed_fraction
-        end
-        for e in 1:M
-            u0[2*N + 2*(e-1) + 1] = (1-seed_fraction)^2   # SS
-            u0[2*N + 2*(e-1) + 2] = (1-seed_fraction)*seed_fraction    # SI
-        end
+    for i in 1:N
+        u0[2*(i-1)+1] = s0[i]
+        u0[2*(i-1)+2] = i0[i]
+    end
+    for (e, (i, j)) in enumerate(directed_edges)
+        u0[2*N + 2*(e-1) + 1] = s0[i] * s0[j]   # SS_ij
+        u0[2*N + 2*(e-1) + 2] = s0[i] * i0[j]   # SI_ij
     end
 
     prob = ODEProblem(rhs!, u0, (Float64(tspan[1]), Float64(tspan[2])))
-    sol = solve(prob; saveat=saveat)
+    tol = (; (k => Float64(v) for (k, v) in pairs((; reltol, abstol)) if v !== nothing)...)
+    sol = solve(prob; saveat = Float64(saveat), tol...)
 
     return PairBasedResult(sol, g, N, M, directed_edges, edge_idx, model)
 end

@@ -1,0 +1,107 @@
+---
+title: "From a reaction network to a pairwise model"
+subtitle: "NodeBasedModels.jl vignette N01 (template: copy to N<nn>_<slug>/index.qmd and replace the placeholders)"
+---
+
+::: {.content-hidden}
+Owner of this template: V-NBM-infra. This block is not rendered in any format (Quarto `.content-hidden`) and is
+ignored by `_shared/check_pages.jl`; page authors may keep or delete it. Page owners copy the template to
+N<nn>_<slug>/index.qmd; the id must be the catalogue id in _shared/pages.toml and the title the catalogue title.
+`_shared/check_pages.jl` checks the rules below; `_shared/render.sh` renders under NETEPI_STRICT_CACHE=1 (html,
+pdf, then gfm last so that the gfm figures survive) and fails on warnings.
+
+Rules (DESIGN_NetworkEpiCore.md §F, §E.5, amendments §J–§M):
+ 1. every model twice: low level (Catalyst / MTK / direct -> contact_model -> node_based) THEN the factory, with a
+    vector_fields_equal (or isequivalent) assertion;
+ 2. every simulation comparison: scenario_summary(sc), comparisonplot, compare, and describe_reference (N, runs,
+    conditioning, and the kept fraction: P(major), or P(survival) for a Survival-conditioned SIS/SIRS scenario);
+ 3. every number in the prose is printed by code (inline Julia code calling fmt(x), or a printed table);
+    (inline code is evaluated even inside this hidden block, so none is written here);
+ 4. Lean only through lean("NEP.…") with a name from NetworkEpiCore.jl/proofs/CITABLE.txt; never "certified";
+ 5. mirrored pages: for each mirror E the cell labelled shared-cell-E (or shared-cell, when the page has one
+    mirror) is identical to the EdgeBasedModels.jl page's shared cell (and to DESIGN §E.5), with the same scenario
+    ids, apart from the `# --- NBM vignette` / `# --- EBM vignette` sections and lines ending in `# back end`;
+    `#|` option lines are not compared;
+ 6. bands: spread = q2.5–q97.5, mean band = ±1.96 SE (the NEC recipes); never min–max;
+ 7. anchors R0 = 2, γ = 1/4, τ = 1/6 unless the scenario says otherwise (print them with anchors(sc); for SIS and
+    SIRS it prints the pairwise threshold τ_c and τ/τ_c, since the edge-based R₀ is not defined there; for a
+    clustered or dormant descriptor it says that NEC does not compute R₀ for that descriptor);
+ 8. no page may simulate or compute a reference ensemble: committed summaries only.
+:::
+
+```{julia}
+#| label: setup
+#| output: false
+include(joinpath(@__DIR__, "..", "_shared", "setup.jl"))
+require_summaries([:sir_pois5, :sir_reg6])
+```
+
+## The model
+
+The shared cell of DESIGN §E.5: every line outside the `# --- NBM vignette` section and the `# back end` line is
+identical on the mirrored EdgeBasedModels.jl page E01. A Quarto cell shows only its last value, and `display` of a
+plot inside a cell is not captured (Plots sends it to a GR window), so the cell ends with `comparisonplot` and
+keeps the `compare` table as `tab`, which is printed below.
+
+```{julia}
+#| label: shared-cell
+#| fig-cap: "Pairwise model against the committed NetworkOutbreaks ensemble (spread band q2.5–q97.5 of the runs; residual panel: mean band ±1.96 SE)."
+using NetworkEpiCore, NetworkOutbreaks, Catalyst, Plots
+sir = @reaction_network sir begin
+    @parameters τ γ
+    τ, S + I --> 2I        # contact: per-contact (per-edge) rate τ; S converted, I unchanged
+    γ, I --> R             # node-local transition
+end
+model = contact_model(sir)          # prints the typing report (B.1)
+sc    = scenario(:sir_pois5)        # Poisson(5), τ = 1/6, γ = 1/4, 1% seeds in I, t ∈ [0, 60]
+@assert isequivalent(model, sc.model)
+ref   = scenario_summary(sc)        # committed NO ensemble: N = 10⁴, 200 runs, fresh graph per run
+# --- NBM vignette ---------------------------------------------------------------
+using NodeBasedModels
+sys   = node_based(model, sc.network)                      # low level
+sysF  = generate_pairwise(sir_model(), sc.network, default_closure(sc.network); cumulative = true)  # factory
+@assert vector_fields_equal(symbolic_ode(sys), symbolic_ode(sysF))
+# --- both -------------------------------------------------------------------------
+sol = solve_epidemic(sys, sc)                              # p, initial, tspan, saveat all from the scenario
+det = model_curves(sys, sol; t = sc.tgrid, label = "pairwise")   # back end
+tab = compare(ref, det)                                    # D∞, z∞, ΔR∞ (95% CI), Δpeak, Δt_peak
+comparisonplot(ref, det; observables = [:I, :cumulative])  # top: spread ribbon + mean + curve; bottom: residual ± 1.96 SE
+```
+
+The reference and the anchors, printed by code (rules 2 and 7):
+
+```{julia}
+anchors(sc);
+describe_reference(ref);
+```
+
+```{julia}
+tab
+```
+
+The largest prevalence gap is D∞ = `{julia} fmt(only(r.D∞ for r in tab.rows if r.observable === :I))`.
+
+## The same model on a 6-regular network
+
+```{julia}
+sc6  = scenario(:sir_reg6)
+ref6 = scenario_summary(sc6)
+anchors(sc6);
+describe_reference(ref6);
+sys6 = node_based(model, sc6.network)
+det6 = model_curves(sys6, solve_epidemic(sys6, sc6); t = sc6.tgrid, label = "pairwise")
+tab6 = compare(ref6, det6)
+```
+
+```{julia}
+#| label: fig-compare-reg6
+#| fig-cap: "As above, on the 6-regular network of `:sir_reg6`."
+comparisonplot(ref6, det6; observables = [:I, :cumulative])
+```
+
+On the regular network D∞ = `{julia} fmt(only(r.D∞ for r in tab6.rows if r.observable === :I))`.
+
+## References
+
+::: {#refs}
+:::

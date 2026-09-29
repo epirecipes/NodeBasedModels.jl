@@ -1,15 +1,35 @@
+# Owner: V-NBM-infra (DESIGN_NetworkEpiCore.md §F, §F.2). Pages live in N<nn>_<slug>/index.qmd; the catalogue is
+# _shared/pages.toml. Render with _shared/render.sh (strict cache, fails on warnings), which renders html, pdf and
+# then gfm in separate passes: a single `quarto render` of all formats deletes index_files/ after the
+# self-contained html and so breaks the gfm figure links. freeze: auto keeps the executed results in _freeze/,
+# which is kept with the rendered outputs (index.qmd alone sets freeze: false; see there).
 project:
   type: default
+  render:
+    - index.qmd
+    - "N[0-9][0-9]_*/index.qmd"
 
 engine: julia
 
-freeze: auto
+julia:
+  project: "."
+  env: ["NETEPI_STRICT_CACHE=1", "GKSwstype=100"]
 
 execute:
+  freeze: auto
   fig-format: png
   fig-dpi: 150
   fig-width: 7
-  fig-height: 5
+  fig-height: 4.6
+  warning: true
+
+# Rewrites links to other pages (`N01_…/index.qmd`, `../index.qmd`) to index.md in gfm and index.html otherwise: a
+# default-type project does not rewrite .qmd links itself (checked by `_shared/check_pages.jl --rendered`).
+filters:
+  - _shared/qmd-links.lua
+
+bibliography: references.bib
+link-citations: true
 
 format:
   html:
@@ -17,14 +37,21 @@ format:
     code-fold: false
     theme: cosmo
     embed-resources: true
+    html-math-method: mathjax
+  gfm:
+    toc: true
   pdf:
     pdf-engine: lualatex
     mainfont: "STIX Two Text"
     mathfont: "STIX Two Math"
     monofont: "Fira Code"
+    # STIX Two Text lacks ⟨ ⟩ ≈ ∞ ₀ √ and Fira Code lacks others (∞ in code and output, for one), so every font falls
+    # back to STIX Two Math, then Menlo; headings use the text font. Set here for every page (pages need no copy).
+    sansfont: "STIX Two Text"
+    mainfontfallback: ["STIXTwoMath:mode=harf;", "Menlo:mode=harf;"]
+    sansfontfallback: ["STIXTwoMath:mode=harf;", "Menlo:mode=harf;"]
+    monofontfallback: ["STIXTwoMath:mode=harf;", "Menlo:mode=harf;"]
+    geometry: ["margin=2cm"]
+    # code and output wrap at the margin (fvextra); see the file
+    include-in-header: _shared/pdf-header.tex
     toc: true
-  gfm:
-    toc: true
-
-julia:
-  project: "."
