@@ -1,8 +1,13 @@
-# networks.jl — Network structure definitions
+# networks.jl — Network structure definitions (owner: WP15)
 #
 # Describes the contact network topology independently of the disease model.
 # Two main types: homogeneous (all nodes have degree n) and heterogeneous
-# (nodes have a degree distribution p_k).
+# (nodes have a degree distribution p_k), plus the graph-instance `GraphNetwork`.
+#
+# Since 0.2 the canonical network object is a NetworkEpiCore `NetworkDescriptor`
+# (`ConfigurationNetwork`, `ClusteredNetwork`, `ExplicitGraph`, …). `node_based` converts a
+# descriptor to these structures (constructors in compat.jl); the public `GraphNetwork`
+# constructors are deprecated in favour of `ExplicitGraph` (deprecated.jl).
 
 """
     NetworkStructure
@@ -105,11 +110,25 @@ second_moment(net::HeterogeneousNetwork) = net.second_moment
 excess_degree(net::HomogeneousNetwork) = Float64(net.n - 1)
 excess_degree(net::HeterogeneousNetwork) = net.excess_degree
 
+"""
+    clustering(net::NetworkStructure) -> Float64
+
+Keeling's clustering coefficient ϕ of a homogeneous or heterogeneous network structure (the
+ratio of triangles to connected triples, used by `KeelingClosure` and `BarnardClosure`). For a
+NetworkEpiCore descriptor use `clustering_coefficient(net)`.
+"""
 clustering(net::NetworkStructure) = net.ϕ
+
+# NetworkEpiCore's generic (DESIGN §A.2): Keeling's ϕ of a homogeneous or heterogeneous network.
+clustering_coefficient(net::Union{HomogeneousNetwork,HeterogeneousNetwork}) = net.ϕ
 
 population_size(net::NetworkStructure) = net.N
 
 # ─── Graph-instance network ───────────────────────────────────────────────────
+
+# Tag of the inner constructor: construction without the deprecation warning of the public
+# constructors (used by `GraphNetwork(::ExplicitGraph)` in compat.jl).
+struct _Internal end
 
 """
     GraphNetwork <: NetworkStructure
@@ -122,26 +141,47 @@ Used for individual-level, pair-based, and stochastic graph models.
 - `transmission_matrix` — matrix with `T[i,j]` equal to the per-edge infection
   rate from node `j` to node `i`, or `nothing` for a uniform infection rate
   supplied by the solver keyword arguments
+
+The public constructors `GraphNetwork(g)`, `GraphNetwork(g; transmission_rate,
+transmission_matrix)` and `GraphNetwork(g, T)` are deprecated: pass `ExplicitGraph(g)` (from
+NetworkEpiCore) to `node_based(model, ExplicitGraph(g); level = :individual)` or to the graph-level
+builders, which convert it with `GraphNetwork(net::ExplicitGraph; …)`.
 """
 struct GraphNetwork <: NetworkStructure
     graph::Any  # AbstractGraph from Graphs.jl
     transmission_matrix::Union{Nothing, Matrix{Float64}}
+    GraphNetwork(graph, T::Union{Nothing,Matrix{Float64}}, ::_Internal) = new(graph, T)
 end
 
-function GraphNetwork(g; transmission_rate::Float64=1.0)
+# The graph network of `g` with an optional uniform per-edge rate or an explicit rate matrix
+# (`T[i, j]` = rate from j to i). Fixes verified issue B04 (a): `nothing` (not 1.0) means "not
+# given", so an explicit rate 1.0 is kept, and any non-negative Real rate is accepted.
+function _graph_network(g; transmission_rate::Union{Nothing,Real} = nothing,
+                        transmission_matrix::Union{Nothing,AbstractMatrix{<:Real}} = nothing)
     N = Graphs.nv(g)
-    if transmission_rate == 1.0
-        return GraphNetwork(g, nothing)
+    if !isnothing(transmission_matrix)
+        isnothing(transmission_rate) || throw(ArgumentError(
+            "pass either transmission_rate or transmission_matrix, not both"))
+        size(transmission_matrix) == (N, N) || throw(DimensionMismatch(
+            "transmission_matrix must be $(N)×$(N) for a graph with $(N) nodes; got " *
+            "$(size(transmission_matrix))"))
+        all(x -> isfinite(x) && x >= 0, transmission_matrix) || throw(ArgumentError(
+            "transmission_matrix entries must be finite and non-negative"))
+        return GraphNetwork(g, Matrix{Float64}(transmission_matrix), _Internal())
     end
+    isnothing(transmission_rate) && return GraphNetwork(g, nothing, _Internal())
+    rate = Float64(transmission_rate)
+    (isfinite(rate) && rate >= 0) || throw(ArgumentError(
+        "transmission_rate must be finite and non-negative; got $(transmission_rate)"))
     T = zeros(N, N)
     for e in Graphs.edges(g)
         s, d = Graphs.src(e), Graphs.dst(e)
-        T[d, s] = transmission_rate  # T_ij = rate from j to i
+        T[d, s] = rate  # T_ij = rate from j to i
         if !Graphs.is_directed(g)
-            T[s, d] = transmission_rate
+            T[s, d] = rate
         end
     end
-    return GraphNetwork(g, T)
+    return GraphNetwork(g, T, _Internal())
 end
 
 # Implement NetworkStructure interface

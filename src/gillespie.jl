@@ -1,9 +1,18 @@
-# gillespie.jl — Exact stochastic SIR simulation on graphs via JumpProcesses.jl
+# gillespie.jl — the 0.1 exact stochastic simulators on graphs (owner: WP24; deprecated)
 #
-# Uses ConstantRateJump with the Direct (Gillespie) aggregator for exact
-# stochastic simulation of SIR dynamics on a specific graph.
+# DESIGN §A.4: the `gillespie_*` functions are deprecated and will be removed in
+# NodeBasedModels 0.3. NetworkOutbreaks' `simulate` is the exact event-driven simulator of the
+# ecosystem (any model, DirectSSA / NextReaction / HAS, validated against the deterministic back
+# ends), so new code should use it.
 #
-# State vector u[1:2N]:
+# - `gillespie_sir` builds one JumpProcesses `ConstantRateJump` per edge direction and per node.
+#   Its kernel `_gillespie_sir` lives in the JumpProcesses extension
+#   (ext/NodeBasedModelsJumpProcessesExt.jl), which loads whenever JumpProcesses is loaded. With
+#   the installed stack that is always (ModelingToolkitBase depends on JumpProcesses); if it is
+#   not, the call throws an `ArgumentError` asking for `using JumpProcesses`.
+# - `gillespie_sis` is a hand-rolled Direct-method SSA and needs no extension.
+#
+# gillespie_sir state vector u[1:2N]:
 #   u[i] = 1 if node i is susceptible, 0 otherwise
 #   u[N+i] = 1 if node i is infected, 0 otherwise
 #   Recovered is derived: R_i = 1 - u[i] - u[N+i]
@@ -13,6 +22,20 @@
 #     rate = τ × u[susceptible] × u[N+infected]
 #   For each node i: one recovery jump
 #     rate = γ × u[N+i]
+
+function _depwarn_gillespie(name::Symbol)
+    Base.depwarn("`$(name)` is deprecated and will be removed in NodeBasedModels 0.3: simulate " *
+                 "with NetworkOutbreaks (`simulate`, the exact event-driven simulator for any " *
+                 "model: DirectSSA, NextReaction, HAS), or use the deterministic graph-level " *
+                 "models `node_based(model, ExplicitGraph(g); level = :individual | :pair, p)`.",
+                 name)
+end
+
+# The graph network of the 0.1 simulators (an ExplicitGraph is converted without a warning).
+_gillespie_network(net::GraphNetwork) = net
+_gillespie_network(net::ExplicitGraph) = GraphNetwork(net)
+_gillespie_network(net) = throw(ArgumentError(
+    "the Gillespie simulators take an ExplicitGraph or a GraphNetwork; got $(typeof(net))"))
 
 """
     GillespieResult
@@ -87,16 +110,23 @@ function population_fraction(r::GillespieResult, state::Symbol; saveat::Float64 
 end
 
 """
-    gillespie_sir(net; kwargs...)
+    gillespie_sir(net; infection_rate = 0.5, recovery_rate = 0.1, initial_infected = [1],
+                  tmax = 100.0, seed = nothing) -> GillespieResult
+
+Deprecated (removed in NodeBasedModels 0.3): use NetworkOutbreaks' `simulate`.
 
 Run an exact Gillespie (SSA) SIR simulation on a specific graph using
-JumpProcesses.jl with the Direct aggregator.
+JumpProcesses.jl with the Direct aggregator. It is implemented by the extension
+`NodeBasedModelsJumpProcessesExt`, which loads with JumpProcesses (ModelingToolkit, a
+dependency of NodeBasedModels, loads JumpProcesses, so it is normally available; otherwise
+`using JumpProcesses`).
 
-Each infected node can transmit to each susceptible neighbor at rate `infection_rate`.
-Each infected node recovers at rate `recovery_rate`.
+Each infected node can transmit to each susceptible neighbor at rate `infection_rate` (or at
+the network's per-edge rate `T[i, j]` when it has a transmission matrix). Each infected node
+recovers at rate `recovery_rate`.
 
 # Arguments
-- `net::GraphNetwork` — graph network
+- `net` — an `ExplicitGraph` or a `GraphNetwork`
 
 # Keyword Arguments
 - `infection_rate` — per-edge transmission rate τ (default: 0.5)
@@ -110,10 +140,9 @@ Each infected node recovers at rate `recovery_rate`.
 
 # Example
 ```julia
-using Graphs
+using Graphs, JumpProcesses
 g = random_regular_graph(100, 6)
-net = GraphNetwork(g)
-result = gillespie_sir(net; infection_rate=0.15, recovery_rate=0.1,
+result = gillespie_sir(ExplicitGraph(g); infection_rate=0.15, recovery_rate=0.1,
                        initial_infected=[1,2,3])
 ts, S_counts = aggregate(result, :S)
 ```
@@ -121,86 +150,29 @@ ts, S_counts = aggregate(result, :S)
 # References
 - Gillespie (1977) "Exact stochastic simulation of coupled chemical reactions"
 """
-function gillespie_sir(net::GraphNetwork;
-                        infection_rate::Float64 = 0.5,
-                        recovery_rate::Float64 = 0.1,
-                        initial_infected::Vector{Int} = [1],
-                        tmax::Float64 = 100.0,
-                        seed::Union{Int, Nothing} = nothing)
-    g = net.graph
-    N = nv(g)
-    T = _effective_transmission_matrix(net, infection_rate)
+function gillespie_sir(net; kwargs...)
+    _depwarn_gillespie(:gillespie_sir)
+    return _gillespie_sir(_gillespie_network(net); kwargs...)
+end
 
-    # State: u[1:N] = S indicators, u[N+1:2N] = I indicators
-    u0 = zeros(Int, 2N)
-    for i in 1:N
-        if i in initial_infected
-            u0[N+i] = 1
-        else
-            u0[i] = 1
-        end
-    end
-
-    # Build jump processes
-    jumps = ConstantRateJump[]
-
-    # Infection jumps: one jump per transmission direction.
-    for e in edges(g)
-        let s = src(e), d = dst(e), n = N
-            rate_sd = T[d, s]
-            if rate_sd > 0
-                push!(jumps, ConstantRateJump(
-                    (u, p, t) -> rate_sd * u[d] * u[n+s],
-                    integrator -> begin
-                        integrator.u[d] -= 1
-                        integrator.u[n+d] += 1
-                    end
-                ))
-            end
-            if !Graphs.is_directed(g)
-                rate_ds = T[s, d]
-                if rate_ds > 0
-                    push!(jumps, ConstantRateJump(
-                        (u, p, t) -> rate_ds * u[s] * u[n+d],
-                        integrator -> begin
-                            integrator.u[s] -= 1
-                            integrator.u[n+s] += 1
-                        end
-                    ))
-                end
-            end
-        end
-    end
-
-    # Recovery jumps: for each node
-    for i in 1:N
-        let node = i, n = N
-            push!(jumps, ConstantRateJump(
-                (u, p, t) -> p[2] * u[n+node],
-                integrator -> begin
-                    integrator.u[n+node] -= 1
-                end
-            ))
-        end
-    end
-
-    p = [0.0, recovery_rate]
-    dprob = DiscreteProblem(u0, (0.0, tmax), p)
-    jprob = JumpProblem(dprob, Direct(), jumps...)
-
-    if !isnothing(seed)
-        sol = solve(jprob, SSAStepper(); seed=seed)
-    else
-        sol = solve(jprob, SSAStepper())
-    end
-
-    return GillespieResult(sol, g, N)
+# The kernel of gillespie_sir; the JumpProcesses extension adds the method on GraphNetwork.
+function _gillespie_sir(net; kwargs...)
+    Base.get_extension(@__MODULE__, :NodeBasedModelsJumpProcessesExt) === nothing ||
+        throw(ArgumentError("gillespie_sir takes a GraphNetwork; got $(typeof(net))"))
+    throw(ArgumentError(
+        "gillespie_sir needs JumpProcesses: load it with `using JumpProcesses` (it activates the " *
+        "extension NodeBasedModelsJumpProcessesExt). gillespie_sir is deprecated; " *
+        "NetworkOutbreaks' `simulate` is the exact simulator to use instead."))
 end
 
 """
-    gillespie_sir_average(net; nruns, kwargs...)
+    gillespie_sir_average(net; nruns = 100, dt = 1.0, tmax_grid = 100.0, kwargs...)
+
+Deprecated (removed in NodeBasedModels 0.3): use a NetworkOutbreaks ensemble
+(`simulate_ensemble`). Runs [`gillespie_sir`](@ref) (the JumpProcesses extension).
 
 Run multiple Gillespie simulations and compute time-averaged trajectories.
+`kwargs` are passed to `gillespie_sir`.
 
 Returns a NamedTuple with fields:
 - `t_grid` — regular time grid
@@ -215,13 +187,15 @@ avg = gillespie_sir_average(net; nruns=200, infection_rate=0.15,
 # avg.t_grid, avg.I_mean, avg.I_q05, avg.I_q95
 ```
 """
-function gillespie_sir_average(net::GraphNetwork;
+function gillespie_sir_average(net;
                                 nruns::Int = 100,
-                                dt::Float64 = 1.0,
-                                tmax_grid::Float64 = 100.0,
+                                dt::Real = 1.0,
+                                tmax_grid::Real = 100.0,
                                 kwargs...)
-    N = nv(net.graph)
-    t_grid = collect(0.0:dt:tmax_grid)
+    _depwarn_gillespie(:gillespie_sir_average)
+    gnet = _gillespie_network(net)
+    N = nv(gnet.graph)
+    t_grid = collect(0.0:Float64(dt):Float64(tmax_grid))
     nt = length(t_grid)
 
     S_all = zeros(nruns, nt)
@@ -230,7 +204,7 @@ function gillespie_sir_average(net::GraphNetwork;
     final_sizes = zeros(Int, nruns)
 
     for run in 1:nruns
-        res = gillespie_sir(net; kwargs...)
+        res = _gillespie_sir(gnet; kwargs...)
 
         # Interpolate onto grid
         for (ti, tval) in enumerate(t_grid)
@@ -322,40 +296,40 @@ function (r::GillespieSISResult)(t::Real)
 end
 
 """
-    gillespie_sis(net; kwargs...) -> GillespieSISResult
+    gillespie_sis(net; infection_rate = 0.5, recovery_rate = 1.0, initial_infected = [1],
+                  tmax = 100.0, seed = nothing) -> GillespieSISResult
 
-Exact Gillespie SSA for SIS on a graph. Each S–I edge fires infection at
-rate `infection_rate`; each I node recovers (back to S) at rate
-`recovery_rate`. Per-node S→I event times are recorded so reinfection
-counts can be reconstructed.
+Deprecated (removed in NodeBasedModels 0.3): use NetworkOutbreaks' `simulate`, whose
+trajectories also give reinfection counts (`reinfection_histogram`).
 
-!!! note "Migration path"
-    This is the package's first-generation SSA, optimised for SIS only.
-    For new code, prefer the companion package
-    [`NetworkOutbreaks.jl`](https://github.com/) which provides a
-    general-purpose Direct-method SSA that works for any compartmental
-    model (SIS, SIR, SEIR, …) and integrates with both
-    `NodeBasedModels.CompartmentalModel` and
-    `EdgeBasedModels.DiseaseProgression`. The integration testset
-    `"NetworkOutbreaks integration"` in this package exercises that
-    adapter; see also `vignettes/15_reinfection_counting/index.qmd` for
-    a SIS reinfection-counting workflow that uses NetworkOutbreaks for
-    ground-truth simulation. `gillespie_sis` will continue to be
-    supported for back-compat, but no new features will be added.
+Exact Gillespie SSA for SIS on a graph (an `ExplicitGraph` or a `GraphNetwork`). Each S–I edge
+fires infection at rate `infection_rate`; each I node recovers (back to S) at rate
+`recovery_rate`. Per-node S→I event times are recorded so reinfection counts can be
+reconstructed. It is a hand-rolled Direct method and needs no extension.
+
+See `vignettes/09_reinfection_counting` for a SIS reinfection-counting workflow that uses
+NetworkOutbreaks for the ground-truth simulation.
 
 # Keyword Arguments
-- `infection_rate::Float64` — per-edge τ (default `0.5`)
-- `recovery_rate::Float64`  — per-node γ (default `1.0`)
-- `initial_infected::Vector{Int}` — initial I nodes (default `[1]`)
-- `tmax::Float64` — simulation horizon (default `100.0`)
-- `seed::Union{Int, Nothing}` — RNG seed (default `nothing`)
+- `infection_rate` — per-edge τ (default `0.5`)
+- `recovery_rate`  — per-node γ (default `1.0`)
+- `initial_infected` — initial I nodes (default `[1]`)
+- `tmax` — simulation horizon (default `100.0`)
+- `seed` — `MersenneTwister` seed (default `nothing`: the global RNG)
 """
-function gillespie_sis(net::GraphNetwork;
-                        infection_rate::Float64 = 0.5,
-                        recovery_rate::Float64 = 1.0,
-                        initial_infected::Vector{Int} = [1],
-                        tmax::Float64 = 100.0,
-                        seed::Union{Int, Nothing} = nothing)
+function gillespie_sis(net; kwargs...)
+    _depwarn_gillespie(:gillespie_sis)
+    return _gillespie_sis(_gillespie_network(net); kwargs...)
+end
+
+function _gillespie_sis(net::GraphNetwork;
+                        infection_rate::Real = 0.5,
+                        recovery_rate::Real = 1.0,
+                        initial_infected::AbstractVector{<:Integer} = [1],
+                        tmax::Real = 100.0,
+                        seed::Union{Integer, Nothing} = nothing)
+    tmax = Float64(tmax)
+    recovery_rate = Float64(recovery_rate)
     g = net.graph
     N = nv(g)
     Tmat = _effective_transmission_matrix(net, infection_rate)
@@ -532,20 +506,25 @@ function reinfection_histogram_series(r::GillespieSISResult, ts::AbstractVector,
 end
 
 """
-    gillespie_sis_average(net; nruns, kwargs...)
+    gillespie_sis_average(net; nruns = 100, dt = 1.0, tmax_grid = 100.0, seed = nothing, kwargs...)
+
+Deprecated (removed in NodeBasedModels 0.3): use a NetworkOutbreaks ensemble.
 
 Run `nruns` independent Gillespie SIS simulations and return averaged
 prevalence trajectories. Returns a NamedTuple
-`(t_grid, S_mean, I_mean, S_q05, S_q95, I_q05, I_q95)`.
+`(t_grid, S_mean, I_mean, S_q05, S_q95, I_q05, I_q95)`. With `seed`, run r uses the seed
+`seed + r - 1`.
 """
-function gillespie_sis_average(net::GraphNetwork;
+function gillespie_sis_average(net;
                                 nruns::Int = 100,
-                                dt::Float64 = 1.0,
-                                tmax_grid::Float64 = 100.0,
-                                seed::Union{Int, Nothing} = nothing,
+                                dt::Real = 1.0,
+                                tmax_grid::Real = 100.0,
+                                seed::Union{Integer, Nothing} = nothing,
                                 kwargs...)
+    _depwarn_gillespie(:gillespie_sis_average)
+    net = _gillespie_network(net)
     N = nv(net.graph)
-    t_grid = collect(0.0:dt:tmax_grid)
+    t_grid = collect(0.0:Float64(dt):Float64(tmax_grid))
     nt = length(t_grid)
     S_all = zeros(nruns, nt)
     I_all = zeros(nruns, nt)
@@ -555,7 +534,7 @@ function gillespie_sis_average(net::GraphNetwork;
         # ensemble. If the caller passes `seed`, use it as a base; otherwise
         # leave each run's RNG to its own default.
         run_seed = isnothing(seed) ? nothing : seed + run - 1
-        res = gillespie_sis(net; tmax = tmax_grid, seed = run_seed, kwargs...)
+        res = _gillespie_sis(net; tmax = tmax_grid, seed = run_seed, kwargs...)
         for (ti, tval) in enumerate(t_grid)
             u = res(min(tval, last(res.times)))
             I_all[run, ti] = count(u)

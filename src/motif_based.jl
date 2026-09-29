@@ -23,16 +23,36 @@
 #     `population_pairwise.jl`:
 #       [SS]_pairwise = 2·E_SS, [SI]_pairwise = E_SI, [II]_pairwise = 2·E_II.
 #
-# This file implements the trivial m=2, k=2 case which is provably
-# equivalent to `generate_pairwise(sis_model(), regular_network(2),
-# KeelingClosure())`. Higher m or k will be added in later phases.
+# Implemented orders: k = 2 (ring) with 2 ≤ m ≤ 6 and k = 3 with m ∈ {2, 3, 4}.
+# m = 2 is the Keeling pairwise model (`generate_pairwise(sis_model(),
+# regular_network(k), KeelingClosure())`).
+#
+# External-infection bookkeeping (one rule for every builder). A motif vertex i
+# in state S has n_ext(i) = k − deg_motif(i) neighbours outside the motif. The
+# closure estimates the expected number of infected ones:
+#
+#   * single-vertex anchor:  n_ext(i) · L(σᵢ, I)/(k·⟨σᵢ⟩), because L(σᵢ, I)/⟨σᵢ⟩
+#     counts infected neighbours among all k neighbours of an S vertex. The
+#     factor n_ext/k is Keeling's κ = (k−1)/k for pairs, (k−1)/k and (k−2)/k for
+#     the ends and middle of a k = 3 path, 1/2 for the ends of a ring path;
+#   * multi-vertex anchor A ∋ i (chain and per-shape Kirkwood): L(A + e = I)/L_A,
+#     summed over the ways e can attach to A, with no slot factor, because each
+#     labelled (A, e) embedding already is one (anchor, external neighbour) pair
+#     and i has the same n_ext in A as in σ.
+#
+# Every closure is exact on tree-indexed Markov states of a k-regular tree (the
+# factorising random-mixing initial condition is the special case of independent
+# vertices), and for k = 3 also at the random-mixing initial condition of any
+# 3-regular host whose motif counts are supplied; test/suites/motif.jl checks
+# both against the master equation.
 
 """
     MotifClosure(k, m)
 
-Motif/subgraph closure of order `m` on a `k`-regular host network class.
-Subtype of [`ClosureMethod`](@ref). Currently only `(k, m) = (2, 2)` is
-implemented.
+Motif/subgraph closure of order `m` for SIS on a `k`-regular host network class
+(Keeling, House, Cooper & Pellis 2016, Approximation 2). Subtype of
+[`ClosureMethod`](@ref). Implemented: `k = 2` with `2 ≤ m ≤ 6` and `k = 3` with
+`m ∈ {2, 3, 4}`; see [`motif_based_sis`](@ref).
 """
 struct MotifClosure <: ClosureMethod
     k::Int
@@ -228,11 +248,13 @@ end
 """
     enumerate_shapes(closure::MotifClosure) -> Vector{MotifShape}
 
-Return the shape table for the requested `(k, m)`. Phase B(a3) supports
-`k = 2` and `2 ≤ m ≤ 6`. The generic chain builder tracks only the
-singleton, the pair `P_2`, and the highest-order path `P_m` (intermediate
-`P_j` for `3 ≤ j < m` are not stored — they are obtained on-the-fly as
-analytical marginals of `P_m` whenever needed).
+Return the shape table for the requested `(k, m)`: `k = 2` with `2 ≤ m ≤ 6`
+and `k = 3` with `m ∈ {2, 3, 4}`. On a ring the generic chain builder tracks
+only the singleton, the pair `P_2`, and the highest-order path `P_m`
+(intermediate `P_j` for `3 ≤ j < m` are not stored — they are obtained
+on-the-fly as analytical marginals of `P_m` whenever needed). On a 3-regular
+host every connected induced shape up to order `m` is tracked: `P_3` and `C_3`
+for `m ≥ 3`, and `P_4`, `K_{1,3}`, paw, `C_4`, `K_4 − e`, `K_4` for `m = 4`.
 """
 function enumerate_shapes(closure::MotifClosure)
     if closure.k == 2 && closure.m == 2
@@ -387,36 +409,50 @@ end
 # ─── Public entry point ────────────────────────────────────────────────────
 
 """
-    motif_based_sis(; β, γ, k, m,
-                     tspan=(0.0,100.0), N=1.0, ε=1e-3, kwargs...) -> MotifSystem
+    motif_based_sis(; β, γ, k, m, tspan = (0.0, 100.0), N = 1.0, ε = 1e-3,
+                    n_p3, n_c3, n_p4, n_k13, n_paw, n_c4, n_k4me, n_k4) -> MotifSystem
 
-Build a motif-closure SIS system on a `k`-regular host with motif order
-`m`. Currently `k = 2` with `2 ≤ m ≤ 6` is implemented:
+Build the motif-closure SIS system of order `m` on a `k`-regular host with `N`
+nodes (Keeling, House, Cooper & Pellis 2016, Approximation 2). The variables
+count induced motifs by canonical state class (see [`MotifSystem`](@ref));
+solve with [`solve_motif`](@ref) and read prevalence with
+`compartment(sys, sol, :I)`.
 
-  * `m = 2` (Phase B(a1)) and `m = 3` (Phase B(a2)) use hand-derived
-    specialised RHS builders.
-  * `m ∈ {4, 5, 6}` (Phase B(a3)) uses a generic chain builder that
-    tracks only the singleton, the pair `P_2`, and the highest-order
-    path `P_m`. Closure enters at the (m+1)-vertex level via the
-    order-m Kirkwood/path factorisation:
+- `β` is the per-contact (per-edge) transmission rate — the τ of the rest of
+  the package (the keyword keeps its 0.1 name) — and `γ` the recovery rate.
+- `ε` is the initial infected fraction. The initial condition is random mixing:
+  vertex states are independent, so every motif count is its host count times
+  the probability of its state class.
 
-        L_{(s_0, s_1, …, s_m)}_{P_{m+1}}
-            ≈ L_{(s_0, …, s_{m-1})}_{P_m} · L_{(s_1, …, s_m)}_{P_m}
-                 / L_{(s_1, …, s_{m-1})}_{P_{m-1}}
+Implemented orders:
 
-    where `L_{(σ)}_{P_{m-1}}` is computed on-the-fly as a marginal of
-    the tracked `P_m` variables.
+- `k = 2` (ring), `m = 2` (Keeling pairwise) and `m = 3` (single-vertex anchor
+  at the path ends), and `m ∈ {4, 5, 6}` with the generic chain builder, which
+  tracks the singleton, `P_2` and `P_m` and closes the `(m+1)`-path by the
+  order-`m` Kirkwood factorisation
+  `L(s₀,…,s_m) ≈ L(s₀,…,s_{m−1}) · L(s₁,…,s_m) / L(s₁,…,s_{m−1})`.
+  The keyword `_use_generic_chain_builder = true` (diagnostic) uses the chain
+  builder at `m = 3` too; the two `m = 3` closures agree at the random-mixing
+  initial condition and differ off it.
+- `k = 3`, `m = 2` (Keeling pairwise), `m = 3` (paths `P_3` and triangles `C_3`,
+  single-vertex anchor) and `m = 4` (all six connected 4-vertex shapes; the
+  external neighbour of a 4-vertex motif is closed through a 3-vertex anchor
+  containing the infected vertex, the per-shape Kirkwood closure). At `m = 4`
+  the `P_3`/`C_3` derivatives are the image of the 4-vertex derivatives, with
+  multiplicities computed from the host counts.
 
-The hidden kwarg `_use_generic_chain_builder=false` lets you A/B test
-the generic builder against the specialised m=3 builder. This is for
-diagnostic use only — the generic chain builder uses a strictly
-higher-order closure than the original m=3 builder, so the two RHSs
-agree exactly only at the random-mixing IC, not under perturbation.
+Host motif counts (`k = 3`). The defaults are those of an asymptotically large
+random 3-regular graph (locally tree-like): `n_p3 = 3N − 3n_c3`, `n_c3 = 0`,
+`n_p4 = 6N`, `n_k13 = N` and no paw, `C_4`, `K_4 − e` or `K_4`. For a given
+graph `g` pass its counts: `n_c3 = sum(triangles(g)) ÷ 3`,
+`n_p3 = Σ_v d_v(d_v − 1)/2 − 3n_c3`, and the 4-vertex counts from
+`NodeBasedModels.induced_subgraph_counts_4vertex(g)`.
 
-For `k = 3, m = 4`, the system is implemented but should not be interpreted
-as a certified monotone refinement of `m = 3`: the Lean marginalisation
-theorems in `EdgeBasedModels.jl/proofs/EBCMCategory/` show that the
-Kirkwood-form order-4 RHS need not project to a better order-3 RHS.
+Every closure is exact on tree-indexed Markov vertex states of a tree-like
+host, and for `k = 3` at the random-mixing initial condition of any 3-regular
+host whose counts are supplied; it is an approximation otherwise. Against
+stochastic simulation on random 3-regular hosts the error decreases from
+`m = 2` to `m = 4` (`test/suites/motif.jl`).
 
 Other `(k, m)` combinations throw `ArgumentError`.
 """
@@ -439,9 +475,6 @@ function motif_based_sis(; β::Real, γ::Real, k::Integer, m::Integer,
     if !supported
         throw(ArgumentError(
             "motif_based_sis(k=$k, m=$m) is not yet implemented; supported: k=2 with 2 ≤ m ≤ 6, k=3 with m ∈ {2,3,4}."))
-    end
-    if k == 3 && m == 4
-        @warn "motif_based_sis(k=3, m=4) is implemented, but Lean T3b/T7 certify that this Kirkwood refinement need not marginalise monotonically to m=3." maxlog=1
     end
 
     closure = MotifClosure(k, m)
@@ -472,11 +505,10 @@ function motif_based_sis(; β::Real, γ::Real, k::Integer, m::Integer,
     elseif k == 3 && m == 4
         # Phase B(c): six 4-vertex shapes added on top of B(b) layout.
         # Default counts for an asymptotic random 3-regular host: every
-        # vertex is the centre of one K_{1,3}, and each induced P_3
-        # extends ≈ 2 ways into a P_4 (per endpoint, 2 choices for the
-        # next neighbour minus the rare loop-back). Other 4-vertex shapes
-        # (paw, C_4, K_4-e, K_4) have asymptotic density 0; users with
-        # quantitative graphs should call `induced_subgraph_counts_4vertex`
+        # vertex is the centre of one K_{1,3}, and each of the 3N/2 edges
+        # is the middle edge of (k-1)² = 4 induced P_4. Other 4-vertex
+        # shapes (paw, C_4, K_4-e, K_4) have asymptotic density 0; users
+        # with quantitative graphs should call `induced_subgraph_counts_4vertex`
         # and pass the precise counts.
         nc3   = Float64(n_c3)
         np3   = n_p3 < 0  ? max(0.0, 3.0 * Float64(N) - 3.0 * nc3) :
@@ -489,7 +521,17 @@ function motif_based_sis(; β::Real, γ::Real, k::Integer, m::Integer,
         nc4   = Float64(n_c4)
         nk4me = Float64(n_k4me)
         nk4   = Float64(n_k4)
-        rhs! = _build_sis_k3_m4_rhs(idx)
+        # A triangle on a 3-regular host lies in a paw, a K₄ − e or a K₄; with none of them
+        # the C₃ variables would have no 4-vertex superset, stay frozen at their initial
+        # values and still feed the pair equations (a silently wrong result).
+        (nc3 > 0 && npaw + nk4me + nk4 == 0) && throw(ArgumentError(
+            "motif_based_sis(k = 3, m = 4): n_c3 = $(nc3) triangles but n_paw = n_k4me = " *
+            "n_k4 = 0; on a 3-regular host every triangle lies in a paw, K₄ − e or K₄. Pass " *
+            "the host's counts, e.g. from induced_subgraph_counts_4vertex(g)"))
+        mult  = _mat_3from4_multiplicities(n_p3 = np3, n_c3 = nc3, n_p4 = np4,
+                                           n_k13 = nk13, n_paw = npaw, n_c4 = nc4,
+                                           n_k4me = nk4me, n_k4 = nk4)
+        rhs! = _build_sis_k3_m4_rhs(idx; ext_p3 = mult.P3, ext_c3 = mult.C3)
         u0   = _build_sis_k3_m4_ic(idx, Float64(N), Float64(ε),
                                     np3, nc3, np4, nk13, npaw, nc4, nk4me, nk4)
     else
@@ -529,19 +571,24 @@ end
 #     For P₃ (|G|=2): palindromes have L = 2·E, non-palindromes L = E.
 #
 # Closure is now lifted to the 4-node level (open path P₄ on
-# (e,1,2,3)). For an external slot at position 1 (an end of the P₃),
-# we use the (m+1)-th order Kirkwood factorisation that conditions on
-# the existing triple and extends by one vertex:
+# (e,1,2,3)). For the external slot at position 1 (an end of the P₃),
+# we condition the external vertex on the end vertex only (single-vertex
+# anchor):
 #
-#   L_{(X,σ₁,σ₂,σ₃)}_P₄ ≈ L_{(σ₁,σ₂,σ₃)}_P₃ · L_{(X,σ₁)}_P₂ / ⟨σ₁⟩
+#   L_{(X,σ₁,σ₂,σ₃)}_P₄ ≈ L_{(σ₁,σ₂,σ₃)}_P₃ · P(X | σ₁),
+#   P(X | σ₁) = L_{(X,σ₁)}_P₂ / (k · ⟨σ₁⟩),   k = 2,
 #
-# (Same form for the right-side extension, with σ₃ playing σ₁'s role.)
-# This factorisation
+# since L_{(X,σ₁)}_P₂ / ⟨σ₁⟩ counts X-neighbours among both neighbours of
+# a σ₁ vertex and an end of the path has one of them outside it
+# (n_ext/k = 1/2). (Same form for the right-side extension, with σ₃
+# playing σ₁'s role.) This factorisation
 #   (a) reuses the triple variables we already track,
 #   (b) has a single-vertex denominator (more robust as ⟨S⟩ → 0),
 #   (c) is exact when (X,σ₁,σ₂,σ₃) factorises as
 #       P(X|σ₁,σ₂,σ₃) ≈ P(X|σ₁), i.e. the next vertex depends only on
 #       its immediate neighbour given the rest of the path.
+# (0.1 omitted the factor 1/2 and so doubled the external infection
+# pressure; at the random-mixing IC dE_SSS/dt even had the wrong sign.)
 #
 # Pair derivatives are NOT closed at the pair level — they are exact
 # marginals of triple transitions:
@@ -579,6 +626,10 @@ const _P3_LABELLED = [
 
 @inline _bit(s::Symbol) = (s === :I) ? 1 : 0
 @inline _enc3(σ) = (_bit(σ[1]) << 2) | (_bit(σ[2]) << 1) | _bit(σ[3])
+
+# Slot factor n_ext/k of a path end on a ring (k = 2): one of its two
+# neighbours lies outside the path.
+const _RING_END_SLOT = 1 / 2
 
 function _build_sis_k2_m3_rhs(idx::Dict{Tuple{Symbol,Vector{Symbol}},Int})
     # Singleton + pair indices
@@ -672,20 +723,20 @@ function _build_sis_k2_m3_rhs(idx::Dict{Tuple{Symbol,Vector{Symbol}},Int})
                     end
                     flow_int = β * n_int * Lσ
 
-                    # External contribution: only for endpoints (i=1 or 3).
-                    # (m+1)-Kirkwood: L_{(I,σ)}·L_{(σ_end,I)}_P₂ / ⟨σ_end⟩
-                    # = Lσ · Lpair(σ[end], :I) / ⟨σ[end]⟩
+                    # External contribution: only for endpoints (i=1 or 3),
+                    # each with one external slot out of k = 2 neighbours:
+                    # L_{(I,σ)} ≈ Lσ · Lpair(σ[end], :I) / (2·⟨σ[end]⟩).
                     flow_ext = 0.0
                     if i == 1
                         # External e attaches to vertex 1 (state :S),
-                        # closure L_(I,σ₁,σ₂,σ₃) ≈ Lσ · L_(I,S) / ⟨S⟩
-                        flow_ext = β * safe_ratio(Lσ * Lpair(:I, :S),
-                                                  single(:S))
+                        # closure L_(I,σ₁,σ₂,σ₃) ≈ Lσ · L_(I,S) / (2⟨S⟩)
+                        flow_ext = β * _RING_END_SLOT *
+                            safe_ratio(Lσ * Lpair(:I, :S), single(:S))
                     elseif i == 3
                         # External e attaches to vertex 3 (state :S),
-                        # closure L_(σ₁,σ₂,σ₃,I) ≈ Lσ · L_(S,I) / ⟨S⟩
-                        flow_ext = β * safe_ratio(Lσ * Lpair(:S, :I),
-                                                  single(:S))
+                        # closure L_(σ₁,σ₂,σ₃,I) ≈ Lσ · L_(S,I) / (2⟨S⟩)
+                        flow_ext = β * _RING_END_SLOT *
+                            safe_ratio(Lσ * Lpair(:S, :I), single(:S))
                     end
 
                     σp = (i == 1) ? [:I, σ[2], σ[3]] :
@@ -763,11 +814,12 @@ end
 # ─── Solver ────────────────────────────────────────────────────────────────
 
 """
-    solve_motif(sys::MotifSystem; saveat=nothing, alg=Tsit5(),
+    solve_motif(sys::MotifSystem; saveat=nothing, alg=nothing,
                 reltol=1e-8, abstol=1e-10, kwargs...)
 
 Solve the motif-closure ODE system. Returns the `OrdinaryDiffEq` solution
 object. Use [`compartment`](@ref) to extract per-compartment trajectories.
+`alg = nothing` uses the `OrdinaryDiffEqDefault` automatic algorithm.
 
 Default tolerances are tightened from `OrdinaryDiffEq`'s defaults
 (`reltol=1e-3, abstol=1e-6`) to `1e-8`/`1e-10`; closure ratios in the
@@ -840,9 +892,11 @@ end
 # on the fly by marginalising P_m over the dropped position.
 #
 # At m = 3 this is L_(I,σ₁,σ₂)·L_σ / L_(σ₁,σ₂) which differs from the
-# specialised B(a2) form L_σ·L_(I,σ₁)/⟨σ₁⟩. The two coincide at the
-# random-mixing IC (both reduce to N·ε·∏ p(σ_i)) but in general the
-# generic form is a strictly higher-order closure.
+# specialised B(a2) form L_σ·L_(I,σ₁)/(2⟨σ₁⟩). The two coincide at the
+# random-mixing IC (both give L_σ·ε) and, more generally, whenever the
+# vertex states are Markov along the ring; otherwise the generic form is a
+# strictly higher-order closure. No slot factor appears here: the anchor
+# (σ₁, …, σ_{m-1}) contains the extended end, which has one external slot.
 #
 # ─── Pair / singleton derivatives ────────────────────────────────────────
 #
@@ -1427,24 +1481,44 @@ end
 # use a *per-shape higher-order Kirkwood* closure that drops a chosen
 # vertex w (typically diametrically opposite to the extension vertex i)
 # and factorises the 5-vertex labelled count through the resulting
-# 3-vertex induced subgraph:
+# 3-vertex induced subgraph (the anchor A = σ-{w} ∋ i):
 #
 #   L_(e, σ) ≈ L_(σ-{w}∪{e}) · L_σ / L_(σ-{w})
 #
-# where σ-{w} is always a tracked 3-vertex shape (P_3 or C_3) and
-# σ-{w}∪{e} is always a tracked 4-vertex shape (P_4, K_{1,3}, paw, C_4).
-# The drop vertex w is selected per (shape, ext_vertex) pair via the
-# `_CLOSURE_RULES_4V` registry below; see `motif_symbolic.jl` for the
-# matching symbolic closure rule (must agree element-wise).
+# where σ-{w} is always a tracked 3-vertex shape (P_3 or C_3) and, when e
+# is adjacent to i only, σ-{w}∪{e} is a tracked 4-vertex shape (P_4,
+# K_{1,3}, paw, C_4). The drop vertex w is selected per (shape,
+# ext_vertex) pair via the `_CLOSURE_RULES_4V` registry below; see
+# `motif_symbolic.jl` for the matching symbolic closure rule (must agree
+# element-wise).
 #
 # The contribution to dL_σ at the (S → I) flip of vertex i is then
 #
-#   flow_ext_i = β · (n_ext_i / k) · safe_ratio(L_(σ-{w}∪{e=I}) · L_σ,
-#                                                L_(σ-{w}))
+#   flow_ext_i = β · safe_ratio(Σ_c L_c(anchor, e = I) · L_σ, L_(σ-{w}))
 #
-# This generalises the simple single-vertex Markov closure (which is
-# recovered by the `:uniform_anchor` legacy variant, kept as a private
-# diagnostic via the `closure_kind` kwarg of `_build_sis_k3_m4_rhs`).
+# with NO slot factor. The sum runs over the completions c of the anchor
+# by an external neighbour e of i (`_kirkwood_completions`): e adjacent to
+# i only (the registry's target), or also to one or both other anchor
+# vertices, which closes a C_3 or C_4 through e (targets paw, C_4, K_4 − e,
+# K_4). Every rule drops a w that is not adjacent to i, so i has the same
+# n_ext_i external slots in the anchor as in σ, and each labelled
+# (anchor, external neighbour) pair is exactly one labelled embedding of
+# one completion: Σ_c L_c/L_anchor is the expected number of infected
+# external neighbours of i given the anchor's state, and on any 3-regular
+# host the completions account for exactly n_ext_i slots per anchor. On a
+# tree only the registry's target has copies. (0.1 multiplied by n_ext_i/k
+# here, the factor that belongs only to the single-vertex anchor; that
+# undercounted external infection by 1/3 or 2/3 and drove the solution out
+# of the simplex, VERIFIED_ISSUES.md B05. It also used the registry's
+# target alone, which on hosts with short cycles misses the completions
+# that close a cycle.) With the host multiplicities of the 3-from-4 map
+# below, the right-hand side is exact at the random-mixing IC on any
+# 3-regular host whose motif counts are supplied.
+#
+# The single-vertex anchor, flow_ext_i = β·(n_ext_i/k)·L_σ·L_(σᵢ,I)/⟨σᵢ⟩,
+# is kept as the private diagnostic `closure_kind = :uniform_anchor` of
+# `_build_sis_k3_m4_rhs`. Both closures are exact on tree-indexed Markov
+# states and agree there.
 
 # ─── Per-shape Kirkwood closure registry ──────────────────────────────────
 #
@@ -1462,8 +1536,10 @@ end
 #               applied via `canonical_state` to look up the correct
 #               variable index.
 #
-# Verified per-shape derivations are documented in the design spec; the
-# symbolic oracle in `motif_symbolic.jl` uses the same registry.
+# Each perm3 / perm4 is a graph isomorphism from the target shape onto the
+# induced anchor (resp. the anchor plus an external vertex e adjacent to i
+# only), and w is never adjacent to i; test/suites/motif.jl checks both.
+# The symbolic oracle in `motif_symbolic.jl` uses the same registry.
 const _CLOSURE_RULES_4V = Dict{Tuple{Symbol,Int}, NamedTuple}(
     # P_4 (1-2-3-4): drop opposite endpoint.
     (:P4, 1) => (target3=:P3, perm3=(1,2,3), target4=:P4,  perm4=(0,1,2,3)),
@@ -1492,6 +1568,53 @@ const _CLOSURE_RULES_4V = Dict{Tuple{Symbol,Int}, NamedTuple}(
     (:K4me, 4) => (target3=:C3, perm3=(1,3,4), target4=:paw, perm4=(4,1,3,0)),
     # K_4: every vertex has n_ext = 0; no closure needed.
 )
+
+# The 24 permutations of 1:4 (for matching completions to shapes).
+const _PERMS_4 = [collect(p) for p in Iterators.product(1:4, 1:4, 1:4, 1:4)
+                  if allunique(p)]
+
+"""
+    _kirkwood_completions(sh, i, rule) -> Vector{Tuple{Symbol,NTuple{4,Int}}}
+
+Every way an external neighbour `e` of vertex `i` of the 4-vertex shape `sh` can
+complete the rule's 3-vertex anchor `A = σ − {w}` to an induced 4-vertex motif:
+`e` is adjacent to `i` and to any subset of the other two anchor vertices. Each
+entry is `(target4, perm4)`, with `perm4` a graph isomorphism from the positions
+of `target4` onto `A ∪ {e}` (σ-vertex indices, 0 for `e`). The registry's
+tree-like completion (`e` adjacent to `i` only) comes first; the others close a
+cycle through `e` (for a `P_3` anchor end: paw and `C_4`, both: `K_4 − e`).
+
+Summing the labelled counts of all completions counts every (anchor, external
+neighbour of `i`) pair once, so on any 3-regular host the closure sees exactly
+`n_ext(i)` external slots. With the tree-like completion alone the slot count
+falls short by the fraction of completions that close a short cycle (1% at the
+ends of `P_3` on the vignette-10 host); the extra terms vanish on trees.
+"""
+function _kirkwood_completions(sh::MotifShape, i::Int, rule)
+    anchor = collect(rule.perm3)
+    others = [a for a in anchor if a != i]
+    induced = [(a, b) for (a, b) in sh.edges if a in anchor && b in anchor]
+    out = Tuple{Symbol,NTuple{4,Int}}[(rule.target4, rule.perm4)]
+    verts = vcat(anchor, 0)
+    for S in ([others[1]], [others[2]], others)
+        host = Set(Set(e) for e in vcat(induced, [(i, 0)], [(s, 0) for s in S]))
+        found = false
+        for t4 in _SHAPES_4V_K3
+            length(t4.edges) == length(host) || continue
+            for p in _PERMS_4
+                perm = ntuple(j -> verts[p[j]], 4)
+                if Set(Set((perm[a], perm[b])) for (a, b) in t4.edges) == host
+                    push!(out, (t4.name, perm))
+                    found = true
+                    break
+                end
+            end
+            found && break
+        end
+        found || error("_kirkwood_completions: no 4-vertex shape for ($(sh.name), $i, $S)")
+    end
+    return out
+end
 #
 # Lower-order ODEs are EXACT marginals of the highest-tracked-shape
 # transitions in the B(b) sense:
@@ -1499,12 +1622,12 @@ const _CLOSURE_RULES_4V = Dict{Tuple{Symbol,Int}, NamedTuple}(
 #   * Singleton derivatives = pair-flow marginals (model-exact).
 #   * Pair derivatives      = labelled-triple flow marginals
 #                             (sum over P₃ + C₃ contributions, same as B(b)).
-#   * Triple derivatives    = labelled-state flow on each triple shape
-#                             with the order-3 single-anchor closure
-#                             (same as B(b)).
+#   * Triple derivatives    = the image Mat·dE₄ of the 4-vertex derivatives
+#                             (`_build_mat_3from4`, multiplicities from the
+#                             host counts), so no order-3 closure is used.
 #   * 4-vertex derivatives  = labelled-state flow on each 4-vertex shape
-#                             with the order-4 single-anchor closure
-#                             described above.
+#                             with the per-shape Kirkwood closure described
+#                             above.
 
 # Helper: build per-shape labelled-state lookup tables (canon var index,
 # stab factor, internal degrees, neighbour lists).
@@ -1549,7 +1672,7 @@ end
 
 # Build closure data: for each shape, the precomputed per-state σ vectors
 # (so we don't reallocate per RHS call) and per-vertex slot factors
-# (n_ext_i / k as Float64).
+# (n_ext_i / k as Float64; used only by the single-vertex anchor).
 function _shape4_closure_data(sh::MotifShape, k::Int)
     n     = sh.n_nodes
     nlab  = 1 << n
@@ -1582,23 +1705,34 @@ end
 
 # ─── 3-from-4 marginalisation (locked semantic #5) ─────────────────────────
 #
-# The P_3 / C_3 derivatives are EXACT marginals of the 4-vertex shape
+# The P_3 / C_3 derivatives are the image of the 4-vertex shape
 # derivatives:
 #
 #   dE_(σ_3)/dt = Σ_(shape_4, σ_4_canon) M[(σ_3), (σ_4_canon)] · dE_(σ_4_canon)/dt
 #
-# where M is built from the shape-4 sub-3-set topology only and is
-# host-independent. For a `k`-regular host the asymptotic external
-# multiplicity is `ext = k·(k-1)·(k-2)/(deg_pattern)` — in the 3-regular
-# case this is `5` per induced P_3 instance and `3` per induced C_3
-# instance (each P_3 has 5 external slots; each C_3 has 3). Dividing by
-# this ext factor makes M an exact marginalisation map at the random-
-# mixing IC for asymptotic 3-regular hosts; for finite hosts the identity
-# `M·E_4 = E_3` holds approximately (within O(1/N) for sparse hosts) and
-# for arbitrary user-supplied (n_p3, n_c3, n_p4, …) counts the IC may
-# deviate. The conservation law `Σ_c E_(P_3,c) = n_p3` (and analogously
-# for C_3) is preserved exactly because the row-sum of M (per shape_4) is
-# a constant that multiplies the 4-vertex conservation `Σ_c4 dE_4 = 0`.
+# with M[(σ_3), (σ_4)] = (number of induced 3-subsets of σ_4 in state σ_3)
+# / mult_3. Summing the connected induced 4-vertex supersets F ⊃ T of every
+# induced 3-vertex motif T counts T once per superset, so on the host
+#
+#   Σ_F #{T ⊂ F : x_T = c} = Σ_T m(T)·1[x_T = c],
+#
+# where m(T) is the number of supersets of T. M is exact when m(T) equals
+# mult_3 for every T; with the host average
+#
+#   mult_P3 = (2·n_p4 + 3·n_k13 + 2·n_paw + 4·n_c4 + 2·n_k4me) / n_p3,
+#   mult_C3 = (n_paw + 2·n_k4me + 4·n_k4) / n_c3
+#
+# (`_mat_3from4_multiplicities`; the coefficients are the numbers of induced
+# P_3 / C_3 in each 4-vertex shape) the identity E_3 = M·E_4 holds exactly at
+# the random-mixing IC for any host counts, and hence along the solution,
+# because dE_3 = M·dE_4. On an asymptotically large random 3-regular host
+# every P_3 has 5 supersets (2 + 2 at its ends, 1 at its middle) and every
+# C_3 has 3, and the formulas give 5 and 3. (0.1 always used 5 and 3; on the
+# vignette-10 host, n_p3 = 1494 with M·E_4 = 1486.8, that left a constant
+# offset E_3 − M·E_4 in the P_3 variables.) The conservation law
+# Σ_c E_(P_3,c) = n_p3 (and analogously for C_3) is preserved exactly
+# because the per-shape column sum of M is a constant that multiplies the
+# 4-vertex conservation Σ_c4 dE_4 = 0.
 #
 # Bookkeeping: for each canonical 4-vertex variable `(shape_4, σ_4_canon)`
 # we enumerate the four positional 3-subsets `T ⊂ {1,2,3,4}`. If the
@@ -1606,9 +1740,12 @@ end
 # the deg-2 vertex), 3 edges → C_3 contribution. The labelled 3-state is
 # read off `σ_4_canon` at the appropriate positions, then canonicalised
 # via `canonical_state` on `_P3_SHAPE` / `_C3_SHAPE`. The accumulated
-# integer count is divided by the asymptotic ext factor.
+# integer count is divided by the multiplicity.
 
 const _3SUBS_OF_4 = ((1,2,3), (1,2,4), (1,3,4), (2,3,4))
+
+# Asymptotic multiplicities on a locally tree-like 3-regular host.
+const _MULT_3FROM4_ASYMPTOTIC = (P3 = 5.0, C3 = 3.0)
 
 # For a 4-vertex shape, enumerate the per-positional-3-subset
 # specifications: for each `T` whose induced subgraph is connected,
@@ -1647,17 +1784,51 @@ function _shape4_3subset_specs(sh::MotifShape)
     return specs
 end
 
+"""
+    _mat_3from4_multiplicities(; n_p3, n_c3, n_p4, n_k13, n_paw = 0, n_c4 = 0,
+                               n_k4me = 0, n_k4 = 0) -> (P3 = mult_P3, C3 = mult_C3)
+
+Mean number of connected induced 4-vertex supersets of an induced `P_3` and of
+an induced `C_3` on a host with the given induced motif counts:
+`Σ_shape n_shape · #{induced P_3 (C_3) in shape} / n_p3 (n_c3)`. These are the
+divisors of the 3-from-4 map `_build_mat_3from4`, and with them the random-mixing
+initial condition satisfies `E_3 = M·E_4` exactly. A multiplicity whose count or
+superset total is zero (no such 3-vertex motif, or no 4-vertex shape containing
+it, so its variables are frozen at zero) falls back to the asymptotic
+3-regular value, 5 for `P_3` and 3 for `C_3`.
+"""
+function _mat_3from4_multiplicities(; n_p3::Real, n_c3::Real, n_p4::Real,
+                                    n_k13::Real, n_paw::Real = 0.0,
+                                    n_c4::Real = 0.0, n_k4me::Real = 0.0,
+                                    n_k4::Real = 0.0)
+    counts = (n_p4, n_k13, n_paw, n_c4, n_k4me, n_k4)
+    supersets = Dict(:P3 => 0.0, :C3 => 0.0)
+    for (sh, n) in zip(_SHAPES_4V_K3, counts)
+        for (name, _) in _shape4_3subset_specs(sh)
+            supersets[name] += n
+        end
+    end
+    mult(name, n3) = (n3 > 0 && supersets[name] > 0) ? supersets[name] / n3 :
+                                                      _MULT_3FROM4_ASYMPTOTIC[name]
+    return (P3 = Float64(mult(:P3, n_p3)), C3 = Float64(mult(:C3, n_c3)))
+end
+
 # Build the 3-from-4 marginalisation contribution list:
 #   contribs[i_3] :: Vector{Tuple{Int,Float64}}
-# where each `(i_4, coeff)` says `du[i_3] += coeff · du[i_4]`.
-# `k` is the host regularity (used to set the ext-factor); only k=3 is
-# implemented here.
+# where each `(i_4, coeff)` says `du[i_3] += coeff · du[i_4]`, with the
+# multiplicities `ext_p3`, `ext_c3` of `_mat_3from4_multiplicities` as
+# divisors (defaults: the asymptotic 3-regular values 5 and 3). `k` is the
+# host regularity; only k=3 is implemented here.
 function _build_mat_3from4(idx::Dict{Tuple{Symbol,Vector{Symbol}},Int};
-                          k::Int = 3)
+                          k::Int = 3,
+                          ext_p3::Real = _MULT_3FROM4_ASYMPTOTIC.P3,
+                          ext_c3::Real = _MULT_3FROM4_ASYMPTOTIC.C3)
     k == 3 || throw(ArgumentError(
         "_build_mat_3from4: only k=3 supported (got k=$k)"))
+    ext_p3 > 0 && ext_c3 > 0 || throw(ArgumentError(
+        "_build_mat_3from4: multiplicities must be positive (got $ext_p3, $ext_c3)"))
     contribs = Dict{Int, Vector{Tuple{Int,Float64}}}()
-    ext = Dict(:P3 => 5.0, :C3 => 3.0)   # asymptotic 3-regular multiplicity
+    ext = Dict(:P3 => Float64(ext_p3), :C3 => Float64(ext_c3))
     sh3_for = Dict(:P3 => _P3_SHAPE, :C3 => _C3_SHAPE)
     for sh4 in _SHAPES_4V_K3
         specs = _shape4_3subset_specs(sh4)
@@ -1687,17 +1858,20 @@ function _build_mat_3from4(idx::Dict{Tuple{Symbol,Vector{Symbol}},Int};
     return contribs
 end
 
-# NOTE: a per-event 3-from-4 accumulation table was prototyped here
-# (`_shape4_subset_per_vertex`, `_build_3from4_event_table`) as an
-# attempt to make the 3-from-4 marginalisation dynamically exact on
-# finite hosts. It was removed because the natural divisor formula
-# (|Aut_3| · ext) does not reduce to the constant snapshot matrix
-# `_build_mat_3from4` even at the factorising IC where the snapshot
-# identity is exact. Resolving this requires further user input on
-# the intended semantic.
+# The constant map M is the only 3-from-4 bookkeeping: with host-average
+# multiplicities it is exact at the random-mixing IC and E_3 = M·E_4 is then
+# invariant. On hosts where the superset number m(T) varies between motifs
+# (short cycles) E_3 = M·E_4 is itself an approximation of the true P_3
+# counts, of the same order as the closure error.
 
+# `ext_p3`, `ext_c3`: the divisors of the 3-from-4 map (see
+# `_mat_3from4_multiplicities`); the defaults are the asymptotic 3-regular
+# values. `closure_kind = :uniform_anchor` is a private diagnostic (the
+# single-vertex anchor with slot factor n_ext/k).
 function _build_sis_k3_m4_rhs(idx::Dict{Tuple{Symbol,Vector{Symbol}},Int};
-                              closure_kind::Symbol = :kirkwood)
+                              closure_kind::Symbol = :kirkwood,
+                              ext_p3::Real = _MULT_3FROM4_ASYMPTOTIC.P3,
+                              ext_c3::Real = _MULT_3FROM4_ASYMPTOTIC.C3)
     closure_kind === :kirkwood || closure_kind === :uniform_anchor ||
         throw(ArgumentError("_build_sis_k3_m4_rhs: closure_kind must be " *
                             ":kirkwood or :uniform_anchor (got :$closure_kind)"))
@@ -1789,10 +1963,11 @@ function _build_sis_k3_m4_rhs(idx::Dict{Tuple{Symbol,Vector{Symbol}},Int};
             rule === nothing && error(
                 "Missing Kirkwood closure rule for ($(sh.name), vertex $i)")
             t3_idx, t3_stab = target3_arrays[rule.target3]
-            t4_idx, t4_stab = target4_arrays[rule.target4]
-            per_vertex[i] = (perm3 = rule.perm3, perm4 = rule.perm4,
-                             t3_idx = t3_idx, t3_stab = t3_stab,
-                             t4_idx = t4_idx, t4_stab = t4_stab)
+            comps = [(perm4 = perm4, t4_idx = target4_arrays[target4][1],
+                      t4_stab = target4_arrays[target4][2])
+                     for (target4, perm4) in _kirkwood_completions(sh, i, rule)]
+            per_vertex[i] = (perm3 = rule.perm3, t3_idx = t3_idx,
+                             t3_stab = t3_stab, comps = comps)
         end
         closure_rules[si] = per_vertex
     end
@@ -1816,18 +1991,12 @@ function _build_sis_k3_m4_rhs(idx::Dict{Tuple{Symbol,Vector{Symbol}},Int};
     # For each P_3 / C_3 canonical variable index, a list of
     # `(4-vertex var index, coefficient)` pairs such that
     #   du[i_3] = Σ coef · du[i_4]
-    # implements a snapshot-exact marginal of the 4-vertex derivatives:
-    # `Mat · u_4 = u_3` at any factorising IC, and time-differentiating
-    # gives `Mat · du_4 = du_3` at that IC. See `_build_mat_3from4`.
-    #
-    # IMPORTANT: this identity is exact only at the asymptotic
-    # random-3-regular factorising IC; on a finite host with non-
-    # factorising state distributions, the constant linear map is no
-    # longer the correct dynamic marginal. (The would-be correction is
-    # a per-event accumulation inside the 4-vertex flow loop, which we
-    # explored but could not reduce to a closed form that matches the
-    # snapshot marginal at IC. Pending user input on intended semantic.)
-    mat_3from4_dict = _build_mat_3from4(idx; k = 3)
+    # makes the P_3 / C_3 variables the image of the 4-vertex variables:
+    # with the host multiplicities, `Mat · u_4 = u_3` at the random-mixing
+    # IC, and `du_3 = Mat · du_4` keeps it so along the solution. See
+    # `_build_mat_3from4` and `_mat_3from4_multiplicities`.
+    mat_3from4_dict = _build_mat_3from4(idx; k = 3, ext_p3 = ext_p3,
+                                        ext_c3 = ext_c3)
     triple_targets = collect(pairs(mat_3from4_dict))
     triple_target_idx = Int[p.first for p in triple_targets]
     triple_target_contribs = Vector{Vector{Tuple{Int,Float64}}}(
@@ -1882,7 +2051,7 @@ function _build_sis_k3_m4_rhs(idx::Dict{Tuple{Symbol,Vector{Symbol}},Int};
                             if σ[j] === :I; n_int += 1; end
                         end
                         flow_int = β * n_int * Lσ
-                        # External (5-vertex closure) — only if slot > 0
+                        # External (5-vertex closure) — only if n_ext > 0
                         flow_ext = 0.0
                         rule = rules_si[i]
                         if rule !== nothing
@@ -1897,19 +2066,26 @@ function _build_sis_k3_m4_rhs(idx::Dict{Tuple{Symbol,Vector{Symbol}},Int};
                                       _bit(σ[p3[3]])
                                 L3 = u[rule.t3_idx[e3 + 1]] *
                                      rule.t3_stab[e3 + 1]
-                                p4 = rule.perm4
-                                # state4: positions inherit from σ
-                                # except the e-position (perm4[j] == 0)
-                                # which holds :I.
-                                b1 = p4[1] == 0 ? 1 : _bit(σ[p4[1]])
-                                b2 = p4[2] == 0 ? 1 : _bit(σ[p4[2]])
-                                b3 = p4[3] == 0 ? 1 : _bit(σ[p4[3]])
-                                b4 = p4[4] == 0 ? 1 : _bit(σ[p4[4]])
-                                e4 = (b1 << 3) | (b2 << 2) | (b3 << 1) | b4
-                                L4 = u[rule.t4_idx[e4 + 1]] *
-                                     rule.t4_stab[e4 + 1]
-                                flow_ext = β * cl.slot[i] *
-                                    safe_ratio(L4 * Lσ, L3)
+                                # L4 sums the labelled completions of the
+                                # anchor by an infected external neighbour
+                                # e of i, over every way e can attach to
+                                # the anchor (see `_kirkwood_completions`).
+                                # state4: positions inherit from σ except
+                                # the e-position (perm4[j] == 0), which
+                                # holds :I.
+                                L4 = 0.0
+                                for c in rule.comps
+                                    p4 = c.perm4
+                                    b1 = p4[1] == 0 ? 1 : _bit(σ[p4[1]])
+                                    b2 = p4[2] == 0 ? 1 : _bit(σ[p4[2]])
+                                    b3 = p4[3] == 0 ? 1 : _bit(σ[p4[3]])
+                                    b4 = p4[4] == 0 ? 1 : _bit(σ[p4[4]])
+                                    e4 = (b1 << 3) | (b2 << 2) | (b3 << 1) | b4
+                                    L4 += u[c.t4_idx[e4 + 1]] * c.t4_stab[e4 + 1]
+                                end
+                                # No slot factor: L4/L3 already counts the
+                                # external neighbours of i (see header).
+                                flow_ext = β * safe_ratio(L4 * Lσ, L3)
                             end
                         end
                         e_new = e | (1 << (n - i))
@@ -1926,9 +2102,8 @@ function _build_sis_k3_m4_rhs(idx::Dict{Tuple{Symbol,Vector{Symbol}},Int};
         end
 
         # ───── 3-from-4 marginalisation (locked semantic #5) ─────────────
-        # P_3 / C_3 derivatives = exact snapshot marginals of the 4-vertex
-        # derivatives. See `_build_mat_3from4` and the precompute above
-        # for the structure and asymptotic-IC validity caveat.
+        # P_3 / C_3 derivatives = image of the 4-vertex derivatives under
+        # the constant map of `_build_mat_3from4` (see the precompute above).
         @inbounds for j in 1:length(triple_target_idx)
             i3 = triple_target_idx[j]
             s = 0.0
@@ -2012,91 +2187,58 @@ end
 """
     induced_subgraph_counts_4vertex(g::AbstractGraph) -> NamedTuple
 
-Brute-force enumerate all 4-element vertex subsets of `g` and classify
-each induced subgraph by the number of internal edges and degree
-sequence. Returns a `NamedTuple` with fields
-`(:p4, :k13, :paw, :c4, :k4me, :k4)` containing the count of induced
-copies of each connected 4-vertex shape on a `k`-regular host
-(`k = 3` is the typical use case but the helper makes no such
-assumption — it just classifies whatever 4-vertex induced subgraphs
-appear).
+Count the connected induced 4-vertex subgraphs of the undirected graph `g`,
+by shape. Returns a `NamedTuple` `(p4, k13, paw, c4, k4me, k4)`: paths `P_4`,
+claws `K_{1,3}`, paws (triangle plus pendant), 4-cycles `C_4`, diamonds
+`K_4 − e` and complete graphs `K_4`. These are the host counts `n_p4`, …,
+`n_k4` of [`motif_based_sis`](@ref) at `k = 3, m = 4`; the helper itself makes
+no regularity assumption.
 
-Time complexity is `O(N^4)`, fine for `N ≲ 500`.
+Every connected 4-vertex graph has a spanning path or claw, so the vertex sets
+are enumerated from the paths `a–b–c–d` (by their middle edge) and the claws
+(by their centre) of `g`, and each set is classified by its induced edges. The
+cost is `O(Σ_v d_v³)` (linear in `N` on a bounded-degree host). Self-loops are
+ignored; directed graphs throw `ArgumentError`.
 """
 function induced_subgraph_counts_4vertex(g::Graphs.AbstractGraph)
-    n   = Graphs.nv(g)
-    cnt = (p4 = 0, k13 = 0, paw = 0, c4 = 0, k4me = 0, k4 = 0)
-    np4 = 0; nk13 = 0; npaw = 0; nc4 = 0; nk4me = 0; nk4 = 0
-    @inbounds for a in 1:n-3, b in a+1:n-2, c in b+1:n-1, d in c+1:n
-        nodes = (a, b, c, d)
-        # Build degree sequence and edge count of induced subgraph.
-        deg = (0, 0, 0, 0)
-        m   = 0
-        # Manual edge tests for each of the 6 vertex pairs.
-        e_ab = Graphs.has_edge(g, a, b)
-        e_ac = Graphs.has_edge(g, a, c)
-        e_ad = Graphs.has_edge(g, a, d)
-        e_bc = Graphs.has_edge(g, b, c)
-        e_bd = Graphs.has_edge(g, b, d)
-        e_cd = Graphs.has_edge(g, c, d)
-        m = (e_ab ? 1 : 0) + (e_ac ? 1 : 0) + (e_ad ? 1 : 0) +
-            (e_bc ? 1 : 0) + (e_bd ? 1 : 0) + (e_cd ? 1 : 0)
-        # Skip disconnected 4-vertex subgraphs (m < 3 cannot connect 4 nodes).
-        m < 3 && continue
-        da = (e_ab ? 1 : 0) + (e_ac ? 1 : 0) + (e_ad ? 1 : 0)
-        db = (e_ab ? 1 : 0) + (e_bc ? 1 : 0) + (e_bd ? 1 : 0)
-        dc = (e_ac ? 1 : 0) + (e_bc ? 1 : 0) + (e_cd ? 1 : 0)
-        dd = (e_ad ? 1 : 0) + (e_bd ? 1 : 0) + (e_cd ? 1 : 0)
-        ds = sort([da, db, dc, dd])
-        # Connectivity check: ensure subgraph connected on these 4 nodes
-        # via simple BFS from `a`.
-        adj = (
-            (false, e_ab, e_ac, e_ad),
-            (e_ab, false, e_bc, e_bd),
-            (e_ac, e_bc, false, e_cd),
-            (e_ad, e_bd, e_cd, false),
-        )
-        seen = (true, false, false, false)
-        # iterative BFS up to 4 nodes
-        stack = (1,)
-        seen_arr = [true, false, false, false]
-        st = [1]
-        while !isempty(st)
-            u = pop!(st)
-            for v in 1:4
-                if adj[u][v] && !seen_arr[v]
-                    seen_arr[v] = true
-                    push!(st, v)
-                end
+    Graphs.is_directed(g) && throw(ArgumentError(
+        "induced_subgraph_counts_4vertex needs an undirected graph"))
+    sets = Set{NTuple{4,Int}}()
+    add!(a, b, c, d) = push!(sets, Tuple(sort!([a, b, c, d])))
+    nbrs(v) = [w for w in Graphs.neighbors(g, v) if w != v]
+    for b in Graphs.vertices(g), c in nbrs(b)
+        b < c || continue                      # middle edge b–c, once
+        for a in nbrs(b), d in nbrs(c)
+            (a == c || d == b || a == d) && continue
+            add!(a, b, c, d)
+        end
+    end
+    for c in Graphs.vertices(g)
+        nb = nbrs(c)
+        L = length(nb)
+        for i in 1:L-2, j in i+1:L-1, l in j+1:L
+            add!(c, nb[i], nb[j], nb[l])
+        end
+    end
+    np4 = nk13 = npaw = nc4 = nk4me = nk4 = 0
+    for v in sets
+        m = 0
+        deg = [0, 0, 0, 0]
+        for i in 1:3, j in i+1:4
+            if Graphs.has_edge(g, v[i], v[j])
+                m += 1; deg[i] += 1; deg[j] += 1
             end
         end
-        all(seen_arr) || continue
-        # Classify by (m, degree-sequence)
+        # The induced subgraph is connected (it contains a spanning path or
+        # claw); (edge count, maximum degree) identifies the shape.
         if m == 3
-            if ds == [1, 1, 1, 3]
-                nk13 += 1
-            elseif ds == [1, 1, 2, 2]
-                np4 += 1
-            end
-            # m==3 connected 4-vertex graphs: only K_{1,3} or P_4.
+            maximum(deg) == 3 ? (nk13 += 1) : (np4 += 1)
         elseif m == 4
-            # paw (triangle + pendant): degrees [1,2,2,3]
-            # C_4: degrees [2,2,2,2]
-            if ds == [1, 2, 2, 3]
-                npaw += 1
-            elseif ds == [2, 2, 2, 2]
-                nc4 += 1
-            end
+            maximum(deg) == 3 ? (npaw += 1) : (nc4 += 1)
         elseif m == 5
-            # K_4 - e (diamond): degrees [2,2,3,3]
-            if ds == [2, 2, 3, 3]
-                nk4me += 1
-            end
-        elseif m == 6
-            # K_4: degrees [3,3,3,3]
-            if ds == [3, 3, 3, 3]
-                nk4 += 1
-            end
+            nk4me += 1
+        else
+            nk4 += 1
         end
     end
     return (p4 = np4, k13 = nk13, paw = npaw, c4 = nc4, k4me = nk4me, k4 = nk4)
