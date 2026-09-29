@@ -273,8 +273,15 @@ end
     end
     @test_throws ArgumentError induced_subgraph_counts_4vertex(SimpleDiGraph(4))
     # The vignette-10 host is fixed by its seed; its counts are part of the documented example.
+    # Julia 1.13 draws another graph from MersenneTwister(20) than the Julia ≤ 1.12 used for the
+    # vignette, so the documented counts are checked up to 1.12; on every version the counts
+    # satisfy the star identity of a 3-regular graph: each vertex centres C(3, 3) = 1 (not
+    # necessarily induced) K1,3, and an induced k13, paw, k4me and k4 contain 1, 1, 2 and 4 of them.
     gv = random_regular_graph(500, 3; rng = MersenneTwister(20))
-    @test induced_subgraph_counts_4vertex(gv) == (p4 = 2958, k13 = 494, paw = 6, c4 = 6, k4me = 0, k4 = 0)
+    cv = induced_subgraph_counts_4vertex(gv)
+    @test cv.k13 + cv.paw + 2cv.k4me + 4cv.k4 == nv(gv)
+    VERSION < v"1.13" &&
+        @test cv == (p4 = 2958, k13 = 494, paw = 6, c4 = 6, k4me = 0, k4 = 0)
 end
 
 """Induced copies of every tracked shape on the graph `g`."""
