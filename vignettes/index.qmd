@@ -1,0 +1,100 @@
+---
+title: "NodeBasedModels.jl Vignettes"
+subtitle: "Pairwise, closure and graph-level node-based models of epidemics on networks"
+execute:
+  # Frozen like every other page, so CI can build the HTML from _freeze/ without Julia. This page reads the
+  # catalogue (_shared/pages.toml) and the package versions, which can change without this file changing:
+  # re-render it locally (quarto render index.qmd) whenever pages are added or versions bumped.
+  freeze: auto
+---
+
+## Overview
+
+[NodeBasedModels.jl](https://github.com/epirecipes/NodeBasedModels.jl) builds node-based deterministic models of
+epidemics on networks: population-level pairwise models with a choice of triple closure [@keeling1999;
+@eames2002; @house2011], heterogeneous and S-anchored pairwise models, clustered closures [@barnard2019], motif and
+neighbourhood approximations for SIS dynamics [@hadjichrysanthou2012; @ritchie2016], and individual- and pair-based
+models on a fixed graph [@sharkey2008; @sharkey2011; @sharkey2015]. The textbook treatment is @kiss2017.
+
+Models are written once, as a reaction network (Catalyst.jl), an ODE system (ModelingToolkit.jl) or with the
+direct constructor of NetworkEpiCore.jl, and turned into a `ContactModel` with `contact_model`; `node_based`
+then lifts that model onto a network descriptor. The same `ContactModel` is lifted to an edge-based model by
+EdgeBasedModels.jl and simulated by NetworkOutbreaks.jl, so every page compares against the same committed
+stochastic reference summaries (`scenario_summary(sc)`) as the mirrored EdgeBasedModels.jl page.
+
+## Conventions shared by every page
+
+- Every model is shown twice: first built from the low-level front end, then with the factory, and the two vector
+  fields are asserted equal.
+- Every simulation comparison loads the committed NetworkOutbreaks summary of a registered scenario, draws it with
+  the shared `comparisonplot` and tabulates it with `compare`, and states N, the number of runs, the conditioning
+  rule and P(major). Spread bands are the pointwise q2.5–q97.5 of the runs; the comparison band is the mean ±1.96 SE.
+- Every number in the prose is printed by code on the same page.
+- Lean results are cited only by the theorem names listed in `NetworkEpiCore.jl/proofs/CITABLE.txt`.
+- The canonical anchors are R₀ = 2, γ = 1/4 and a per-contact rate τ = 1/6, unless a scenario says otherwise.
+
+## Pages
+
+```{julia}
+#| echo: false
+#| output: asis
+import TOML
+pages = TOML.parsefile(joinpath(@__DIR__, "_shared", "pages.toml"))
+dir_of(id) = (ds = [d for d in readdir(@__DIR__) if startswith(d, id * "_") &&
+                    isfile(joinpath(@__DIR__, d, "index.qmd"))]; length(ds) == 1 ? only(ds) : nothing)
+ids = sort!(collect(keys(pages)))
+println("| # | Page | Scenarios | Mirrors (EdgeBasedModels.jl) |")
+println("|---|---|---|---|")
+for id in ids
+    p = pages[id]
+    d = dir_of(id)
+    page = d === nothing ? "$(p["title"]) *(in preparation)*" : "[$(p["title"])]($(d)/index.qmd)"
+    sc = isempty(p["scenarios"]) ? "–" : join(("`:$(s)`" for s in p["scenarios"]), ", ")
+    mi = isempty(p["mirrors"]) ? "–" : join(p["mirrors"], ", ")
+    println("| $(id) | $(page) | $(sc) | $(mi) |")
+end
+n_ready = count(id -> dir_of(id) !== nothing, ids)
+println()
+println("$(n_ready) of $(length(ids)) pages are available. N14 is the stretch page on population-level ",
+        "multitype pairwise models.")
+```
+
+## Environment
+
+```{julia}
+#| echo: false
+#| output: asis
+root = normpath(joinpath(@__DIR__, "..", ".."))
+println("| Package | Version |")
+println("|---|---|")
+for pkg in ("NetworkEpiCore", "NodeBasedModels", "EdgeBasedModels", "NetworkOutbreaks")
+    proj = TOML.parsefile(joinpath(root, pkg * ".jl", "Project.toml"))
+    println("| ", pkg, ".jl | ", proj["version"], " |")
+end
+println()
+println("Julia ", VERSION, ".")
+```
+
+## Rendering
+
+```bash
+cd NodeBasedModels.jl/vignettes
+julia --project=. -e 'using Pkg; Pkg.instantiate()'
+_shared/render.sh          # html + pdf, then gfm, with NETEPI_STRICT_CACHE=1; fails on warnings or missing summaries
+julia --project=. _shared/check_pages.jl --rendered
+```
+
+The rendered pages and the `_freeze/` directory are kept with the sources, so a page is only re-executed when its
+source changes. This index is frozen too, but it reads the page catalogue and the package versions, which can change
+while `index.qmd` does not, so re-render it locally (`quarto render index.qmd`) when pages are added or versions change.
+Continuous integration builds the HTML from `_freeze/` without running Julia.
+
+Render through `_shared/render.sh` rather than a bare `quarto render`. A single render of all three formats
+deletes each page's `index_files/` directory once the self-contained HTML is written, which also deletes the
+figures that the GitHub-Markdown `index.md` links to. The script therefore renders html and pdf first and gfm
+last, and `check_pages.jl --rendered` fails if an image in an `index.md` points to a missing file.
+
+## References
+
+::: {#refs}
+:::

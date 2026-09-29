@@ -1,0 +1,287 @@
+---
+title: "From a reaction network to a pairwise model"
+subtitle: "NodeBasedModels.jl vignette N01: SIR written as a Catalyst network, lifted to a heterogeneous pairwise model on Poisson(5) and 6-regular networks, and checked against NetworkOutbreaks"
+---
+
+This page shows the whole pipeline once, on the simplest model. An SIR model is written as a reaction network,
+read into NetworkEpiCore's model object with `contact_model`, and lifted with `node_based` to a population-level
+pairwise model: equations for the expected numbers of nodes ([S], [I], [R]) and of ordered pairs of neighbours
+([SS], [SI], …), closed at the level of triples [@keeling1999; @eames2002; @house2011; @kiss2017]. The factory
+`generate_pairwise` then builds the same system, and the two vector fields are checked equal. We print the
+lifted equations, check the conservation laws, and compare the model with a committed NetworkOutbreaks ensemble
+on a Poisson(5) network and on a 6-regular network. The EdgeBasedModels page E01 starts with the same first cell
+and the same scenario, and lifts to an edge-based model instead.
+
+## The shared first cell
+
+The cell below is the same, line for line, as the first cell of EdgeBasedModels' E01, apart from the lines of the
+`# --- NBM vignette` section and the lines marked `# back end`. The contact `τ, S + I --> 2I` has a
+**per-contact** rate τ: a susceptible node with one infectious neighbour is infected at rate τ along that edge.
+The scenario `:sir_pois5` fixes τ = 1/6, γ = 1/4, a Poisson(5) configuration network and 1% of the nodes seeded
+in I. A Quarto cell shows only its last value, so the figure is drawn again below and the cell's output is the
+`compare` table.
+
+```{julia}
+#| label: shared-cell
+include(joinpath(@__DIR__, "..", "_shared", "setup.jl"))
+require_summaries([:sir_pois5, :sir_reg6])   # back end
+using NetworkEpiCore, NetworkOutbreaks, Catalyst, Plots
+sir = @reaction_network sir begin
+    @parameters τ γ
+    τ, S + I --> 2I        # contact: per-contact (per-edge) rate τ; S converted, I unchanged
+    γ, I --> R             # node-local transition
+end
+model = contact_model(sir)          # prints the typing report (B.1)
+sc    = scenario(:sir_pois5)        # Poisson(5), τ = 1/6, γ = 1/4, 1% seeds in I, t ∈ [0, 60]
+@assert isequivalent(model, sc.model)
+ref   = scenario_summary(sc)        # committed NO ensemble: N = 10⁴, 200 runs, a fresh G(N, p) graph per run
+# --- NBM vignette ---------------------------------------------------------------
+using NodeBasedModels
+sys   = node_based(model, sc.network)                      # low level
+sysF  = generate_pairwise(sir_model(), sc.network, default_closure(sc.network); cumulative = true)  # factory
+@assert vector_fields_equal(symbolic_ode(sys), symbolic_ode(sysF))
+# --- both -------------------------------------------------------------------------
+sol = solve_epidemic(sys, sc)                              # p, initial, tspan, saveat all from the scenario
+det = model_curves(sys, sol; t = sc.tgrid, label = "pairwise")   # back end
+comparisonplot(ref, det; observables = [:I, :cumulative])  # top: spread ribbon + mean + curve; bottom: residual ± 1.96 SE
+compare(ref, det)                                          # D∞, z∞, ΔR∞ (95% CI), Δpeak, Δt_peak
+
+```
+
+The rest of the page takes this cell apart.
+
+## The model object and its typing
+
+`contact_model` classifies each reaction by its stoichiometry. `S + I --> 2I` has one catalytic substrate, I, so
+it is a contact `S + I → I + I` with infector I and entry state I; `I --> R` is a node transition. The typing
+report lists the back ends that accept the model; the population pairwise model (`pairwise`) accepts every
+model of the network type theory T_net, and this one is also in the edge-based theory T_EB.
+
+```{julia}
+model
+```
+
+The scenario is pure data: model, network, parameters, seeding, time grid and simulation settings. Its
+`expected` values are computed by NetworkEpiCore when the registry is built, not typed by hand.
+
+```{julia}
+sc
+```
+
+## Low level and factory
+
+The low-level route is `contact_model` then `node_based`. The factory `generate_pairwise(sir_model(), net,
+closure)` builds the same population pairwise model from the canned SIR model; `node_based` adds the
+cumulative-incidence accumulator, so the factory is called with `cumulative = true`. The two vector fields are
+compared symbolically by `vector_fields_equal`:
+
+```{julia}
+sysF0 = generate_pairwise(sir_model(), sc.network, default_closure(sc.network))
+@printf("vector fields equal: %s;  states: node_based %d, factory %d, factory without the accumulator %d\n",
+        vector_fields_equal(symbolic_ode(sys), symbolic_ode(sysF)), length(state_names(symbolic_ode(sys))),
+        length(state_names(symbolic_ode(sysF))), length(state_names(symbolic_ode(sysF0))))
+```
+
+## The mathematics of the lift
+
+The pairwise model follows the expected fraction of nodes in each compartment, [X], and the expected number of
+ordered pairs of neighbours per node in each pair of compartments, [XY] (so Σ_{X,Y} [XY] = ⟨k⟩). A contact
+S + I → I + I along the pair [SI] is an infection, and it changes every pair that the newly infected node
+belongs to; that needs the triples [SSI] and [ISI], which the closure writes in terms of pairs and singles:
+
+$$
+[A\,S\,B] = K\,\frac{[AS]\,[SB]}{[S]}, \qquad K = \frac{\langle k(k-1)\rangle}{\langle k\rangle^2}.
+$$
+
+This constant-K closure is `BernoulliClosure()`, the `default_closure` of a configuration network:
+
+```{julia}
+@printf("default_closure: %s;  K = closure_constant(Poisson(5)) = %.6g;  is_poisson_type: %s\n",
+        default_closure(sc.network), closure_constant(sc.network), is_poisson_type(sc.network) !== nothing)
+```
+
+For Poisson(5), K = 1. The vector field of the lifted system, as NetworkEpiCore's symbolic form (the `ifelse`
+guards only protect the division at [S] = 0):
+
+```{julia}
+symbolic_ode(sys)
+```
+
+Written out (with the closure substituted and [SR], [IR], [RR] following the same pattern),
+
+$$
+\begin{aligned}
+\dot{[S]} &= -\tau[SI], & \dot{[I]} &= \tau[SI] - \gamma[I], & \dot{[R]} &= \gamma[I],\\
+\dot{[SS]} &= -2\tau K\frac{[SS][SI]}{[S]}, &
+\dot{[SI]} &= \tau K\frac{[SS][SI] - [SI]^2}{[S]} - (\tau+\gamma)[SI], &
+\dot{[II]} &= 2\tau[SI] + 2\tau K\frac{[SI]^2}{[S]} - 2\gamma[II],
+\end{aligned}
+$$
+
+and the accumulator $\dot C = \tau[SI]$ counts infections. The initial condition is the image of the edge-based
+one (DESIGN §E.2): with q = 1 − ρ, [S] = q, [I] = ρ, [SS] = ⟨k⟩q², [SI] = ⟨k⟩qρ, [II] = ⟨k⟩ρ² and the pairs with
+R zero. The solution of the shared cell starts there, and it keeps the two conservation laws S + I + R = 1 and
+Σ[XY] = ⟨k⟩ (ordered pairs: [SI] counts once for S–I and once for I–S):
+
+```{julia}
+x(name) = compartment(sys, sol, name)                     # singles [X]
+xy(a, b) = sol[pair_variables(sys)[(a, b)]]               # pairs [XY]
+q, ρ, κ = 1 - 0.01, 0.01, mean_degree(sc.network)
+@printf("[S](0) = %.6f (q = %.6f);  [SI](0) = %.6f (⟨k⟩qρ = %.6f);  [SS](0) = %.6f (⟨k⟩q² = %.6f);  [II](0) = %.6f (⟨k⟩ρ² = %.6f)\n",
+        x(:S)[1], q, xy(:S, :I)[1], κ * q * ρ, xy(:S, :S)[1], κ * q^2, xy(:I, :I)[1], κ * ρ^2)
+pairs_total = xy(:S, :S) .+ 2 .* xy(:S, :I) .+ 2 .* xy(:S, :R) .+ xy(:I, :I) .+ 2 .* xy(:I, :R) .+ xy(:R, :R)
+@printf("max |S + I + R − 1| = %.2e;   max |Σ[XY] − ⟨k⟩| = %.2e\n",
+        maximum(abs.(x(:S) .+ x(:I) .+ x(:R) .- 1)), maximum(abs.(pairs_total .- κ)))
+```
+
+## The same curves as the edge-based model
+
+On a Poisson-type degree distribution (ψ'(x) = αψ(x)^K; Poisson, binomial, negative binomial and regular
+distributions) the constant-K closure is exact against the edge-based model: the map from edge-based states to
+pairwise states is a semiconjugacy, so it carries the edge-based solution to the pairwise one.
+
+```{julia}
+#| echo: false
+#| output: asis
+println("The statement for every T_EB model on a PT network, with the constant closure K = ψ''(1)/ψ'(1)² ",
+        "used here (ψ(1) = 1), is ", lean("NEP.eb_to_pws_pt_closure_one"),
+        ", whose target is the S-anchored pairwise model (S, I, R, [SS], [SI], [SR]); the pairs of the 10-state ",
+        "system solved here that have no S ([II], [IR], [RR]) do not enter those equations. Only this \"if\" direction is formalised for the dynamics; N02 shows a non-PT distribution on which the ",
+        "constant closure is biased.")
+```
+
+Numerically, with EdgeBasedModels loaded:
+
+```{julia}
+using EdgeBasedModels
+eb   = edge_based(model, sc.network)
+deteb = model_curves(eb, solve_epidemic(eb, sc); t = sc.tgrid, label = "edge-based")
+pw_eb = maximum(maximum(abs.(det[X] .- deteb[X])) for X in (:S, :I, :R, :cumulative))
+@printf("max over S, I, R, cumulative of |pairwise − edge-based| on the grid: %.2e\n", pw_eb)
+```
+
+## Against simulation: Poisson(5)
+
+The reference is the committed NetworkOutbreaks ensemble of `:sir_pois5`, simulated with the next-reaction method
+on a fresh Erdős–Rényi graph G(N, p), p = 5/(N − 1), for every run (NetworkOutbreaks samples `PoissonDegree` this way). The anchors and the reference, printed by code:
+
+```{julia}
+anchors(sc);
+describe_reference(ref);
+```
+
+The figure has one column per observable. The top row shows the pointwise q2.5–q97.5 spread of the individual runs,
+their mean and the pairwise curve; the bottom row shows the residual (model minus ensemble mean) with the
+±1.96 SE band of the ensemble mean.
+
+```{julia}
+#| label: fig-pois5
+#| fig-cap: "Pairwise SIR on Poisson(5) against the committed NetworkOutbreaks ensemble of :sir_pois5 (top: spread band q2.5–q97.5 of the runs and their mean; bottom: residual with the mean band ±1.96 SE)."
+#| fig-height: 5.5
+comparisonplot(ref, det; observables = [:I, :cumulative])
+```
+
+```{julia}
+tab = compare(ref, det)
+```
+
+```{julia}
+rI = tab["pairwise", :I]; rC = tab["pairwise", :cumulative]
+@printf("I: D∞ = %.4f at t = %.2f (SE∞ = %.4f, z∞ = %.2f);  final size: model %.4f, ensemble %.4f, ΔR∞ = %+.4f (95%% CI %+.4f to %+.4f)\n",
+        rI.D∞, rI.t_D∞, rI.SE∞, rI.z∞, det[:cumulative][end], det[:cumulative][end] - rC.ΔR∞, rC.ΔR∞, rC.ΔR∞_ci...)
+@printf("registry final size (NetworkEpiCore fixed point): %.4f\n", sc.expected[:final_size])
+```
+
+The columns of `compare` are defined in NetworkEpiCore (`ComparisonTable`): D∞ = max_t |x_det(t) − x̄(t)| is the
+largest gap between the model and the ensemble mean x̄, and t(D∞) the time where it occurs; SE∞ = max_t se(t) is
+the largest standard error of the mean on the grid; and z∞ = max_t |x_det(t) − x̄(t)| / max(se(t), 10⁻⁴) is the
+largest *standardised* gap. z∞ is a maximum over the whole grid in its own right, so it need not occur at t(D∞),
+and it is not in general D∞/SE∞ (that is the standardised gap at t(D∞) only when se is largest there). The standardised gap on the grid, printed by code:
+
+```{julia}
+stI = ref.cond[:I]                                  # the major-run statistics that compare uses
+@assert det.t == ref.t                              # the same grid, so no interpolation
+zI  = abs.(det[:I] .- stI.mean) ./ max.(stI.se, 1e-4)
+iz  = argmax(zI); iD = findfirst(==(rI.t_D∞), ref.t)
+@assert zI[iz] ≈ rI.z∞
+@printf("z∞ = %.2f at t = %.2f (gap %.4f, se %.5f);  at t(D∞) = %.2f: gap D∞ = %.4f, se %.5f, gap/se = %.2f;  D∞/SE∞ = %.2f\n",
+        zI[iz], ref.t[iz], abs(det[:I][iz] - stI.mean[iz]), stI.se[iz], rI.t_D∞, rI.D∞, stI.se[iD], zI[iD],
+        rI.D∞ / rI.SE∞)
+@printf("coverage (fraction of the grid with gap ≤ 1.96 max(se, 10⁻⁴)) = %.3f;  95%% CI of ΔR∞ contains 0: %s\n",
+        rI.coverage, rC.ΔR∞_ci[1] <= 0 <= rC.ΔR∞_ci[2])
+```
+
+The largest prevalence gap is D∞ = `{julia} fmt(rI.D∞)`, at t = `{julia} fmt(rI.t_D∞)`, where it is
+`{julia} fmt(zI[iD]; digits = 3)` standard errors of the 200-run mean. The largest standardised gap is
+z∞ = `{julia} fmt(rI.z∞; digits = 3)`, at t = `{julia} fmt(ref.t[iz])`, `{julia} ref.t[iz] > rI.t_D∞ ? "later" : "earlier"` than t(D∞), where the gap is
+smaller (`{julia} fmt(abs(det[:I][iz] - stI.mean[iz]); digits = 3)`) but so is the standard error. The curve lies
+inside the ±1.96 SE band of the mean on a fraction `{julia} fmt(rI.coverage; digits = 3)` of the grid. The
+final-size difference is ΔR∞ = `{julia} fmt(rC.ΔR∞; digits = 2)`, with 95% interval
+[`{julia} fmt(rC.ΔR∞_ci[1]; digits = 2)`, `{julia} fmt(rC.ΔR∞_ci[2]; digits = 2)`]. The pairwise model here equals
+the edge-based model, the large-N limit of the process, to `{julia} fmt(pw_eb; digits = 2)` (solver tolerance), so
+what remains is Monte Carlo error plus the finite-N deviation of the N = 10⁴ ensemble from that limit, which this
+page does not separate (N02 prints how the error changes between N = 10³, 10⁴ and 10⁵).
+
+## Against simulation: 6-regular
+
+The same model on a 6-regular network. Every node has 6 edges, so the excess degree is 5 and R₀ is again
+T·κ_ex = 0.4 × 5 = 2. Only the scenario changes; the low-level lift and the factory are built again on its network.
+
+```{julia}
+sc6   = scenario(:sir_reg6)
+@assert isequivalent(model, sc6.model)
+ref6  = scenario_summary(sc6)
+sys6  = node_based(model, sc6.network)
+sys6F = generate_pairwise(sir_model(), sc6.network, default_closure(sc6.network); cumulative = true)
+@assert vector_fields_equal(symbolic_ode(sys6), symbolic_ode(sys6F))
+@printf("K = closure_constant(RegularDegree(6)) = %.6f (= (k − 1)/k = %.6f)\n", closure_constant(sc6.network), 5 / 6)
+symbolic_ode(sys6)
+```
+
+With K = 5/6 the triple closure is Keeling's homogeneous [ASB] = ((k − 1)/k)[AS][SB]/[S] [@keeling1999]; the
+coefficients above are those of the display with K = 5/6 and ⟨k⟩ = 6.
+
+```{julia}
+anchors(sc6);
+describe_reference(ref6);
+```
+
+```{julia}
+#| label: fig-reg6
+#| fig-cap: "As above, on the 6-regular network of :sir_reg6."
+#| fig-height: 5.5
+sol6 = solve_epidemic(sys6, sc6)
+det6 = model_curves(sys6, sol6; t = sc6.tgrid, label = "pairwise")
+comparisonplot(ref6, det6; observables = [:I, :cumulative])
+```
+
+```{julia}
+tab6 = compare(ref6, det6)
+```
+
+The two networks have the same R₀ = 2 and the same early growth rate, but different epidemics:
+
+```{julia}
+#| output: asis
+peak(d) = (v = d[:I]; i = argmax(v); (v[i], d.t[i]))
+rows = [(string("`:", s.id, "`"), closure_constant(s.network), basic_reproduction_number(s.model, s.network, s.params),
+         early_growth_rate(s.model, s.network, s.params), peak(d)[1], peak(d)[2], d[:cumulative][end],
+         c["pairwise", :I].D∞, c["pairwise", :cumulative].ΔR∞)
+        for (s, d, c) in ((sc, det, tab), (sc6, det6, tab6))]
+md_table(["scenario", "K", "R₀", "r", "peak I", "t(peak)", "R(t_end)", "D∞(I) vs NO", "ΔR∞ vs NO"], rows)
+```
+
+```{julia}
+@printf("fraction of degree-0 nodes: Poisson(5) %.4f, 6-regular %.4f\n",
+        pgf(PoissonDegree(5), 0.0), pgf(RegularDegree(6), 0.0))
+```
+
+The 6-regular network has the larger and earlier-peaking epidemic although R₀ and r are the same: a Poisson(5)
+network has low-degree nodes that are rarely reached, and a fraction `{julia} fmt(pgf(PoissonDegree(5), 0.0))` of
+nodes with no edges at all. N02 takes this comparison to five degree distributions and to closures that are not
+exact.
+
+## References
+
+::: {#refs}
+:::

@@ -1,0 +1,230 @@
+---
+title: "Clustering"
+subtitle: "NodeBasedModels.jl vignette N05: Keeling's and Barnard's clustered pair closures on networks with triangles, against NetworkOutbreaks and the exact edge-based model of Volz"
+---
+
+Triangles make the neighbours of a node more likely to be neighbours of each other. In a pairwise model that
+changes the triples: the closure [A B C] = K[AB][BC]/[B] treats the two ends of a path A – B – C as independent,
+which they are not when A and C are also joined. Keeling's closure [@keeling1999] mixes the open-path value with a
+closed-triangle correction weighted by the clustering coefficient ϕ; Barnard's improved closure [@barnard2019]
+changes the triangle term so that it conserves pairs. Both are approximations. For the Newman–Miller random
+clustered networks [@newman2009; @miller2009], where each node has s single edges and t triangles, the edge-based
+model of @volz2011 is exact in the large-N limit, so this page can separate the closure error from the Monte Carlo
+error. The EdgeBasedModels page E08 treats the same scenarios from the edge-based side; the first cell is shared
+with it.
+
+```{julia}
+#| label: shared-cell
+include(joinpath(@__DIR__, "..", "_shared", "setup.jl"))
+require_summaries([:sir_clust_s2t2, :sir_reg6, :sir_clust_pois12, :sir_clust_s2t2_N1000, :sir_clust_s2t2_N100000])   # back end
+using NetworkEpiCore, NetworkOutbreaks, Catalyst, Plots
+using EdgeBasedModels, NodeBasedModels
+using Statistics
+sir = @reaction_network sir begin
+    @parameters τ γ
+    τ, S + I --> 2I
+    γ, I --> R
+end
+model = contact_model(sir)
+sc  = scenario(:sir_clust_s2t2)       # s = 2 single edges and t = 2 triangles per node: degree 6
+sc6 = scenario(:sir_reg6)             # the same degree, no triangles
+@assert isequivalent(model, sc.model) && isequivalent(model, sc6.model)
+sc.network
+```
+
+`:sir_clust_s2t2` gives every node s = 2 single edges and t = 2 triangles, so every node has degree 6, like the
+6-regular network of `:sir_reg6`, with the same τ = 1/6 and γ = 1/4. The only difference between the two
+scenarios is the triangles. The descriptor's clustering coefficient and the realised statistics of the simulated
+graphs (means over the runs):
+
+```{julia}
+#| output: asis
+ref  = scenario_summary(sc)
+ref6 = scenario_summary(sc6)
+statrow(s, r) = (string("`:", s.id, "`"), mean_degree(s.network),
+    s.network isa ClusteredNetwork ? clustering_coefficient(s.network) : 0.0,
+    s.network isa ClusteredNetwork ? triangle_edge_fraction(s.network) : 0.0,
+    mean(r.realised[:mean_degree]), mean(r.realised[:clustering]))
+md_table(["scenario", "⟨k⟩", "ϕ = C (descriptor)", "fraction of edges in triangles", "⟨k⟩ realised",
+          "C realised"], [statrow(sc, ref), statrow(sc6, ref6)])
+```
+
+## Low level and factory
+
+`default_closure` of a `ClusteredNetwork` is `KeelingClosure()`, with ϕ read from the descriptor. The low-level
+lift of the Catalyst model and the factory `generate_pairwise(sir_model(), net, KeelingClosure())` are the same
+vector field, and so are the two Barnard systems:
+
+```{julia}
+sysK   = node_based(model, sc.network)                                                        # low level, Keeling
+sysKF  = generate_pairwise(sir_model(), sc.network, KeelingClosure(); cumulative = true)      # factory
+@assert vector_fields_equal(symbolic_ode(sysK), symbolic_ode(sysKF))
+sysB   = node_based(model, sc.network; closure = BarnardClosure())
+sysBF  = generate_pairwise(sir_model(), sc.network, BarnardClosure(); cumulative = true)
+@assert vector_fields_equal(symbolic_ode(sysB), symbolic_ode(sysBF))
+@printf("default_closure: %s;  ϕ = clustering_coefficient = %.6f (= 2/15: %s)\n", default_closure(sc.network),
+        clustering_coefficient(sc.network), clustering_coefficient(sc.network) ≈ 2 / 15)
+```
+
+## The closures
+
+On a network where every node has n neighbours, Keeling's closure is
+
+$$
+[A\,B\,C] = \frac{n-1}{n}\,\frac{[AB][BC]}{[B]}\left((1-\phi) + \phi\,\frac{N\,[AC]}{n\,[A]\,[C]}\right),
+$$
+
+with N = Σ_X [X] taken from the state. The first term is the open path, the second a triangle closed by the pair
+[AC]. For SIR the triple [S S I] now involves [SI], and [I S I] involves [II]: the pairs that the triangle closes.
+In the symbolic field the correction appears as the second fraction inside each closed triple:
+
+```{julia}
+sodeK = symbolic_ode(sysK)
+for n in (:SS, :SI)
+    i = findfirst(==(n), state_names(sodeK)); println("d", n, "/dt = ", sodeK.rhs[i])
+end
+```
+
+Barnard's closure [@barnard2019; @barnard2018thesis] replaces the triangle factor by [AB][BC][CA]/([A]·Σ_a
+[aB][aC]/[a]), which conserves the number of pairs in the triangle term.
+
+## Against simulation: triangles versus none
+
+```{julia}
+anchors(sc);
+describe_reference(ref);
+anchors(sc6);
+describe_reference(ref6);
+```
+
+Four models on the clustered network: Keeling's and Barnard's closures, the unclustered constant-K closure (which
+sees only the degree 6), and the Volz edge-based model; and the pairwise model on the 6-regular network without
+triangles:
+
+```{julia}
+curves_of(sys, s, label) = model_curves(sys, solve_epidemic(sys, s); t = s.tgrid, label)
+dK  = curves_of(sysK, sc, "pairwise, Keeling")
+dB  = curves_of(sysB, sc, "pairwise, Barnard")
+d0  = curves_of(node_based(model, sc.network; closure = BernoulliClosure()), sc, "pairwise, no clustering")
+dV  = curves_of(edge_based(model, sc.network), sc, "edge-based (Volz)")
+d6  = curves_of(node_based(model, sc6.network), sc6, "pairwise")
+tab  = compare(ref, dK, dB, d0, dV)
+tab6 = compare(ref6, d6)
+nothing
+```
+
+```{julia}
+#| label: fig-clust
+#| fig-cap: "SIR on the clustered network :sir_clust_s2t2 (s = 2, t = 2): Keeling, Barnard and unclustered pairwise closures and the Volz edge-based model against the NetworkOutbreaks ensemble (top: spread band q2.5–q97.5 of the runs and their mean; bottom: residual with the mean band ±1.96 SE)."
+#| fig-height: 5.5
+distinct_styles!(comparisonplot(ref, dK, dB, d0, dV; observables = [:I, :cumulative]))
+```
+
+```{julia}
+#| output: asis
+row(t, s, d) = (string("`:", s.id, "`"), d.label, t[d.label, :I].D∞, t[d.label, :I].z∞, d[:cumulative][end],
+                t[d.label, :cumulative].ΔR∞, @sprintf("[%+.4f, %+.4f]", t[d.label, :cumulative].ΔR∞_ci...))
+md_table(["scenario", "model", "D∞(I)", "z∞(I)", "R(t_end)", "ΔR∞", "95% CI of ΔR∞"],
+         vcat([row(tab, sc, d) for d in (dK, dB, d0, dV)], [row(tab6, sc6, d6)]))
+```
+
+```{julia}
+@printf("final size: 6-regular %.4f, clustered (ensemble) %.4f;  triangles lower it by %.4f\n",
+        d6[:cumulative][end], mean(ref.final_size[ref.major]), d6[:cumulative][end] - mean(ref.final_size[ref.major]))
+```
+
+The triangles lower the final size at the same degree. Ignoring them (the unclustered closure) gives the 6-regular
+epidemic, far outside the ensemble. For the prevalence curve Keeling's and Barnard's closures remove most of that
+error, but not all of it. The z∞ column is NetworkEpiCore's largest standardised gap, max_t |x_det(t) − x̄(t)| /
+max(se(t), 10⁻⁴) over the grid (not D∞ divided by a standard error, and not necessarily at t(D∞)): it is
+`{julia} fmt(tab[dK.label, :I].z∞; digits = 3)` for Keeling's closure and `{julia} fmt(tab[dB.label, :I].z∞; digits = 3)`
+for Barnard's, against `{julia} fmt(tab[dV.label, :I].z∞; digits = 3)` for the Volz edge-based model and
+`{julia} fmt(tab[d0.label, :I].z∞; digits = 3)` for the unclustered closure. For the final size the picture differs: Keeling's closure leaves almost all of the final-size
+error of the unclustered closure, and Barnard's closure about 40% of it:
+
+```{julia}
+e0 = tab[d0.label, :cumulative].ΔR∞
+@printf("ΔR∞: unclustered %+.4f;  Keeling %+.4f (%.0f%% of it);  Barnard %+.4f (%.0f%%);  Volz %+.4f\n", e0,
+        tab[dK.label, :cumulative].ΔR∞, 100 * tab[dK.label, :cumulative].ΔR∞ / e0, tab[dB.label, :cumulative].ΔR∞,
+        100 * tab[dB.label, :cumulative].ΔR∞ / e0, tab[dV.label, :cumulative].ΔR∞)
+```
+
+## Poisson singles and triangles
+
+`:sir_clust_pois12` draws the numbers of single edges and triangles from Poisson(1) and Poisson(2) (mean degree 5),
+with τ = 0.6 and γ = 1. Barnard's closure is only implemented for networks with one degree, so here the comparison
+is Keeling's heterogeneous closure against the unclustered one and the Volz model:
+
+```{julia}
+sc12  = scenario(:sir_clust_pois12)
+@assert isequivalent(model, sc12.model)
+ref12 = scenario_summary(sc12)
+anchors(sc12);
+describe_reference(ref12);
+sys12  = node_based(model, sc12.network)
+sys12F = generate_pairwise(sir_model(), sc12.network, KeelingClosure(); cumulative = true)
+@assert vector_fields_equal(symbolic_ode(sys12), symbolic_ode(sys12F))
+println(try node_based(model, sc12.network; closure = BarnardClosure()); "built" catch e; sprint(showerror, e) end)
+dK12 = curves_of(sys12, sc12, "pairwise, Keeling")
+d012 = curves_of(node_based(model, sc12.network; closure = BernoulliClosure()), sc12, "pairwise, no clustering")
+dV12 = curves_of(edge_based(model, sc12.network), sc12, "edge-based (Volz)")
+tab12 = compare(ref12, dK12, d012, dV12)
+nothing
+```
+
+```{julia}
+#| label: fig-clust12
+#| fig-cap: "As above, on :sir_clust_pois12 (Poisson(1) single edges, Poisson(2) triangles)."
+#| fig-height: 5.5
+distinct_styles!(comparisonplot(ref12, dK12, d012, dV12; observables = [:I, :cumulative]))
+```
+
+```{julia}
+#| output: asis
+md_table(["scenario", "model", "D∞(I)", "z∞(I)", "R(t_end)", "ΔR∞", "95% CI of ΔR∞"],
+         [row(tab12, sc12, d) for d in (dK12, d012, dV12)])
+```
+
+## N-scaling: which errors are closure errors
+
+The clustered scenario is also simulated at N = 10³ (2000 runs) and N = 10⁵ (20 runs). The deterministic curves do
+not depend on N; the error of an exact-in-the-limit model shrinks towards the Monte Carlo floor as N grows, while a
+closure error stays.
+
+```{julia}
+#| output: asis
+scal = []
+for id in (:sir_clust_s2t2_N1000, :sir_clust_s2t2, :sir_clust_s2t2_N100000)
+    r = id === :sir_clust_s2t2 ? ref : scenario_summary(scenario(id))
+    t = compare(r, dK, dB, dV)
+    push!(scal, (string("`:", id, "`"), r.N, r.nsims, t[dK.label, :I].D∞, t[dB.label, :I].D∞, t[dV.label, :I].D∞,
+                 t[dV.label, :I].SE∞))
+end
+md_table(["scenario", "N", "runs", "D∞(I), Keeling", "D∞(I), Barnard", "D∞(I), Volz EB", "SE∞(I)"], scal)
+```
+
+```{julia}
+#| label: fig-clust-scaling
+#| fig-cap: "D∞(I) against N on the clustered network: Keeling and Barnard closures and the Volz edge-based model; the grey line is SE∞(I), the Monte Carlo floor."
+#| fig-height: 4.2
+Ns = [s[2] for s in scal]
+plt = plot(; xscale = :log10, yscale = :log10, xlabel = "N", ylabel = "D∞(I)", legend = :outerright)
+plot!(plt, Ns, [s[4] for s in scal]; marker = :circle, label = "Keeling")
+plot!(plt, Ns, [s[5] for s in scal]; marker = :diamond, label = "Barnard")
+plot!(plt, Ns, [s[6] for s in scal]; marker = :square, label = "edge-based (Volz)")
+plot!(plt, Ns, [s[7] for s in scal]; color = :grey, lw = 1, label = "SE∞")
+plt
+```
+
+```{julia}
+@printf("from N = 10⁴ to 10⁵: Keeling %.4f → %.4f, Barnard %.4f → %.4f, Volz EB %.4f → %.4f\n",
+        scal[2][4], scal[3][4], scal[2][5], scal[3][5], scal[2][6], scal[3][6])
+```
+
+From N = 10⁴ to 10⁵ the clustered closures keep their error, while the Volz model's error stays comparable to SE∞,
+the Monte Carlo floor (table above): the remaining Keeling and Barnard errors are closure errors, not finite-size effects.
+
+## References
+
+::: {#refs}
+:::

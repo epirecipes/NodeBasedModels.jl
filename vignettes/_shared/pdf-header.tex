@@ -1,0 +1,10 @@
+% Owner: V-NBM-infra. Included in the preamble of every pdf page (_quarto.yml, format.pdf.include-in-header).
+% Code and code output wrap at the right margin instead of running off the page: the highlighted source
+% (Highlighting, defined by the pandoc highlighting macros) and the plain output blocks (verbatim) become fvextra
+% Verbatim environments with line breaking, in a smaller type so that the printed tables mostly fit on one line.
+\usepackage{fvextra}
+\makeatletter
+\@ifundefined{Highlighting}{}{%
+  \RecustomVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,breakanywhere,commandchars=\\\{\},fontsize=\footnotesize}}
+\makeatother
+\RecustomVerbatimEnvironment{verbatim}{Verbatim}{breaklines,breakanywhere,fontsize=\scriptsize}

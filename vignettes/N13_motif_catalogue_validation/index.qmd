@@ -1,0 +1,303 @@
+---
+title: "Motif catalogue and validation methodology"
+subtitle: "NodeBasedModels.jl vignette N13: how the NodeBasedModels pages are validated against NetworkOutbreaks, every declared verdict checked in one table, the N-scaling protocol, and an appendix listing the motif shapes"
+---
+
+## What this page shows
+
+Every NodeBasedModels page compares a deterministic node-based model with a NetworkOutbreaks
+ensemble through the same three calls: `scenario_summary(sc)`, `comparisonplot(ref, curves...)`
+and `compare(ref, curves...)`. The mirrored EdgeBasedModels page E14 explains how the
+ensembles are built, hashed and cached, and what the statistics mean. NetworkOutbreaks'
+validation vignette (`NetworkOutbreaks.jl/vignettes/05_validation`) documents the simulation
+side. This page gives the node-based view:
+
+1. what a page may and may not do with a reference, in code;
+2. the verdicts that the scenarios declare for the node-based back ends, and every
+   `:exact_limit` and `:biased` declaration checked against its committed summary;
+3. the N-scaling protocol for the node-based closures: exact in the limit versus biased;
+4. an appendix listing the motif shapes and state classes of the SIS motif closures (page N10).
+   It is a table of what the implementation enumerates and makes no categorical claims.
+
+## The shared first cell
+
+This cell is the shared cell of DESIGN §E.5, the same as the first cell of EdgeBasedModels'
+page E14 apart from the back-end lines. Quarto shows only the last value of a cell, the
+`compare` table; the figure is drawn in section 1.
+
+```{julia}
+#| label: shared-cell
+include(joinpath(@__DIR__, "..", "_shared", "setup.jl"))
+require_summaries([:sir_pois5])                          # back end
+using NetworkEpiCore, NetworkOutbreaks, Catalyst, Plots
+sir = @reaction_network sir begin
+    @parameters τ γ
+    τ, S + I --> 2I        # contact: per-contact (per-edge) rate τ; S converted, I unchanged
+    γ, I --> R             # node-local transition
+end
+model = contact_model(sir)          # prints the typing report (B.1)
+sc    = scenario(:sir_pois5)        # Poisson(5), τ = 1/6, γ = 1/4, 1% seeds in I, t ∈ [0, 60]
+@assert isequivalent(model, sc.model)
+ref   = scenario_summary(sc)        # committed NO ensemble: N = 10⁴, 200 runs, a fresh G(N, p) graph per run
+# --- NBM vignette ---------------------------------------------------------------
+using NodeBasedModels
+sys   = node_based(model, sc.network)                      # low level
+sysF  = generate_pairwise(sir_model(), sc.network, default_closure(sc.network); cumulative = true)  # factory
+@assert vector_fields_equal(symbolic_ode(sys), symbolic_ode(sysF))
+# --- both -------------------------------------------------------------------------
+sol = solve_epidemic(sys, sc)                              # p, initial, tspan, saveat all from the scenario
+det = model_curves(sys, sol; t = sc.tgrid, label = "pairwise")   # back end
+comparisonplot(ref, det; observables = [:I, :cumulative])  # top: spread ribbon + mean + curve; bottom: residual ± 1.96 SE
+compare(ref, det)                                          # D∞, z∞, ΔR∞ (95% CI), Δpeak, Δt_peak
+```
+
+## 1. What a page does with a reference
+
+A page never simulates and never computes an ensemble. It loads the committed summary of a
+registered scenario, and the setup cell of every page calls `require_summaries`, so that a
+missing or stale summary is a render error. A summary is valid only for the scenario hash and the
+NetworkOutbreaks algorithm revision it was computed with:
+
+```{julia}
+(; scenario_hash = first(scenario_hash(sc), 12), in_summary = first(ref.scenario_hash, 12),
+   algorithm_revision = NetworkOutbreaks.ALGORITHM_REVISION, summary_revision = ref.algorithm_revision,
+   strict_cache = get(ENV, "NETEPI_STRICT_CACHE", "0"))
+```
+
+Changing anything about a scenario, even only the number of runs, changes its hash. There is
+then no committed summary, and under the strict cache the page fails instead of simulating:
+
+```{julia}
+alt = derive(sc; id = :sir_pois5_demo, nsims = 7)
+refused = try
+    scenario_summary(alt)
+    false
+catch e
+    msg = sprint(showerror, e)
+    e isa ArgumentError && occursin("scenario_summary(:$(alt.id))", msg) && occursin("committed summary", msg) || rethrow()
+end
+(; hash_of_derived = first(scenario_hash(alt), 8), hash_of_scenario = first(scenario_hash(sc), 8),
+   refused_under_strict_cache = refused)
+```
+
+Every comparison states the reference (N, runs, conditioning and the kept fraction), draws the
+spread band (the pointwise q2.5–q97.5 of the runs) and the residual with the mean band (±1.96
+SE), and tabulates `compare`:
+
+```{julia}
+describe_reference(ref);
+```
+
+```{julia}
+#| fig-cap: "The pairwise model of `:sir_pois5` against its reference (spread band q2.5–q97.5 of the major runs; residual panel: mean band ±1.96 SE)."
+tab = compare(ref, det)
+comparisonplot(ref, det; observables = [:I, :cumulative])
+```
+
+```{julia}
+tab
+```
+
+The two bands measure different things. At the simulated peak the spread band is much wider than
+the mean band:
+
+```{julia}
+st = ref.cond[:I]
+i = argmax(st.mean)
+(; t_peak = ref.t[i], spread_width = st.q975[i] - st.q025[i], mean_band_width = 2 * 1.96 * st.se[i],
+   ratio = (st.q975[i] - st.q025[i]) / (2 * 1.96 * st.se[i]), sqrt_runs = sqrt(ref.n_major))
+```
+
+## 2. The declared verdicts, checked
+
+Each scenario declares a verdict for each back end it names: `:exact_limit`, `:biased`,
+`:approximate` or `:inadmissible`. The node-based back ends and the number of scenarios that
+declare each verdict:
+
+```{julia}
+#| output: asis
+nbm_keys = (:pairwise_const, :pairwise_bernoulli, :pairwise_keeling, :pairwise_multitype, :pgf_closure,
+            :s_anchored, :mean_field, :reinfection, :motif, :neighbourhood, :individual, :pair)
+verdicts = (:exact_limit, :biased, :approximate, :inadmissible)
+all_sc = scenarios()
+md_table(vcat(["back end"], collect(string.(verdicts))),
+         [vcat([string("`:", k, "`")], [count(s -> get(s.backends, k, nothing) === v, all_sc) for v in verdicts])
+          for k in nbm_keys])
+```
+
+The `:exact_limit` declarations of the population-level node-based back ends are checked here
+against their committed summaries. Each back end is built from the scenario:
+
+- `:pairwise_const`, `:pairwise_multitype` and `:mean_field` with `node_based(sc)` (the default
+  closure of the descriptor);
+- `:pgf_closure` with `node_based(sc; closure = PGFClosure())`;
+- `:s_anchored` with `node_based(sc; level = :s_anchored)`.
+
+A back end passes when D∞ and |ΔR∞| are both below 0.005 for the prevalence of the infectious
+compartments (`:infectious`), as for the edge-based table of E14:
+
+```{julia}
+#| output: asis
+builders = Dict(:pairwise_const => sc -> node_based(sc), :pairwise_multitype => sc -> node_based(sc),
+                :mean_field => sc -> node_based(sc), :pgf_closure => sc -> node_based(sc; closure = PGFClosure()),
+                :s_anchored => sc -> node_based(sc; level = :s_anchored))
+function check(s, key)
+    r = scenario_summary(s)
+    y = builders[key](s)
+    c = model_curves(y, solve_epidemic(y, s); t = s.tgrid, label = string(key))
+    row = compare(r, c; observables = [:infectious])[string(key), :infectious]
+    return r, row
+end
+exact_rows = []
+for s in all_sc, key in keys(builders)
+    get(s.backends, key, nothing) === :exact_limit || continue
+    r, row = check(s, key)
+    push!(exact_rows, (string("`:", s.id, "`"), string("`:", key, "`"), r.N, r.nsims, row.D∞, row.z∞, row.ΔR∞,
+                       row.D∞ < 0.005 && abs(row.ΔR∞) < 0.005 ? "yes" : "**no**"))
+end
+sort!(exact_rows; by = r -> (r[2], r[1]))
+md_table(["scenario", "back end", "N", "runs", "D∞(infectious)", "z∞", "ΔR∞", "passes"], exact_rows)
+```
+
+```{julia}
+npass = count(r -> r[end] == "yes", exact_rows)
+println(npass, " of ", length(exact_rows), " exact-limit declarations pass D∞ < 0.005 and |ΔR∞| < 0.005.")
+failing = [string(r[1], " ", r[2]) for r in exact_rows if r[end] != "yes"]
+isempty(failing) || println("not passing: ", join(failing, ", "))
+```
+
+The rule is calibrated for N = 10⁴. At N = 10³ the O(1/N) finite-size bias of the simulation is
+larger than the tolerance, so a miss at N = 10³ is not by itself evidence of a wrong model. The
+N-scaling protocol in section 3 separates the two cases.
+
+The `:biased` declarations say that the gap does not vanish as N grows. The tests pin it as
+|ΔR∞| > 0.02 for constant-K pairwise models on non-Poisson networks. Here are the same
+declarations, with the PGF closure, which is exact on the same networks, next to them:
+
+```{julia}
+#| output: asis
+biased_rows = []
+for s in all_sc, key in (:pairwise_const, :pairwise_multitype)
+    get(s.backends, key, nothing) === :biased || continue
+    r, row = check(s, key)
+    pgf = haskey(s.backends, :pgf_closure) ? last(check(s, :pgf_closure)) : nothing
+    push!(biased_rows, (string("`:", s.id, "`"), string("`:", key, "`"), r.N, row.ΔR∞,
+                        "[$(fmt(row.ΔR∞_ci[1])), $(fmt(row.ΔR∞_ci[2]))]", abs(row.ΔR∞) > 0.02 ? "yes" : "**no**",
+                        pgf === nothing ? NaN : pgf.ΔR∞))
+end
+sort!(biased_rows; by = r -> r[1])
+md_table(["scenario", "back end", "N", "ΔR∞", "95% CI", "abs(ΔR∞) > 0.02", "ΔR∞ of the PGF closure"], biased_rows)
+```
+
+The `:approximate` verdicts (the Keeling clustered closure, the SIS approximations, the
+graph-level models) carry no pass rule. Their errors are printed on pages N05, N09–N12 and N04.
+
+## 3. N-scaling: exact in the limit versus biased
+
+Three scenarios are also run at N ∈ {10³, 10⁴, 10⁵} with {2000, 200, 20} runs, so N·runs is
+constant. A representation that is exact in the limit approaches the Monte Carlo floor as N
+grows, with a bias of order 1/N. A structurally biased one levels off at its bias. The pairwise
+model with the constant closure K = ⟨k(k − 1)⟩/⟨k⟩² is exact on the Poisson network of
+`:sir_pois5` and biased on the bimodal and power-law networks of `:sir_bim` and `:sir_pl`. The
+PGF closure is exact on all three:
+
+```{julia}
+#| output: asis
+bases = [:sir_pois5, :sir_bim, :sir_pl]
+variant(id, N) = N == 10_000 ? id : Symbol(id, "_N", N)
+Ns = [1_000, 10_000, 100_000]
+scaling = Dict{Tuple{Symbol,String},Vector{Float64}}()
+floors = Dict{Symbol,Vector{Float64}}()
+srows = []
+for id in bases, N in Ns
+    s = scenario(variant(id, N))
+    r = scenario_summary(s)
+    push!(get!(floors, id, Float64[]), maximum(r.cond[:I].se))
+    for (label, y) in (("pairwise (constant K)", node_based(s)), ("PGF closure", node_based(s; closure = PGFClosure())))
+        c = model_curves(y, solve_epidemic(y, s); t = s.tgrid, label = label)
+        row = compare(r, c; observables = [:I])[label, :I]
+        push!(get!(scaling, (id, label), Float64[]), row.D∞)
+        push!(srows, (string("`:", id, "`"), N, r.nsims, label, row.D∞, maximum(r.cond[:I].se), row.ΔR∞))
+    end
+end
+md_table(["scenario", "N", "runs", "model", "D∞(I)", "SE∞ (MC floor)", "ΔR∞"], srows)
+```
+
+```{julia}
+#| fig-cap: "N-scaling of the largest prevalence gap D∞(I) (log–log). Solid: PGF closure; dashed: constant K; dotted: the largest standard error of the simulated mean (Monte Carlo floor) of each scenario."
+p = plot(; xscale = :log10, yscale = :log10, xlabel = "N", ylabel = "D∞(I)", legend = :outerright,
+         title = "N-scaling of D∞(I)", size = (820, 440))
+for id in bases
+    plot!(p, Ns, scaling[(id, "PGF closure")]; marker = :circle, label = "PGF :$(id)")
+    plot!(p, Ns, scaling[(id, "pairwise (constant K)")]; marker = :square, linestyle = :dash, label = "const K :$(id)")
+    plot!(p, Ns, floors[id]; linestyle = :dot, color = :gray, label = "SE∞ :$(id)")
+end
+p
+```
+
+```{julia}
+#| output: asis
+fmtv(v) = join(fmt.(v), " → ")
+for id in bases
+    println("- `:", id, "`: PGF closure D∞(I) ", fmtv(scaling[(id, "PGF closure")]), "; constant K ",
+            fmtv(scaling[(id, "pairwise (constant K)")]), " (N = 10³ → 10⁴ → 10⁵).")
+end
+```
+
+On the Poisson network the two closures give the same model, since K = 1 there. On the other two
+networks the constant-K gap stays above the PGF-closure gap at N = 10⁵. The PGF closure keeps
+shrinking with N.
+
+## Appendix: motif shapes and state classes
+
+The SIS motif closures of page N10 track, for every connected induced shape H with up to m
+vertices and every assignment of S/I to its vertices, the number of induced copies of H in that
+state, counted as unordered embeddings up to the automorphisms of H. The tables are generated
+from the package's own enumeration (`enumerate_shapes`, `enumerate_state_classes`), so they
+list what the implementation tracks: k = 2 (a ring) with 2 ≤ m ≤ 6, and k = 3 with
+m ∈ {2, 3, 4}.
+
+```{julia}
+#| output: asis
+orders = [(2, 2), (2, 3), (2, 4), (2, 5), (2, 6), (3, 2), (3, 3), (3, 4)]
+crow = []
+for (k, m) in orders
+    shapes = NodeBasedModels.enumerate_shapes(MotifClosure(k, m))
+    nclass = [length(NodeBasedModels.enumerate_state_classes(sh, [:S, :I])) for sh in shapes]
+    push!(crow, ("($(k), $(m))", join(("`$(sh.name)`" for sh in shapes), ", "), sum(nclass)))
+end
+md_table(["(k, m)", "shapes tracked", "variables"], crow)
+```
+
+```{julia}
+#| output: asis
+shape_rows = []
+seen = Set{Symbol}()
+for (k, m) in orders, sh in NodeBasedModels.enumerate_shapes(MotifClosure(k, m))
+    sh.name in seen && continue
+    push!(seen, sh.name)
+    classes = NodeBasedModels.enumerate_state_classes(sh, [:S, :I])
+    push!(shape_rows, ("`$(sh.name)`", sh.n_nodes, isempty(sh.edges) ? "–" : join(("$(a)–$(b)" for (a, b) in sh.edges), ", "),
+                       length(sh.automorphisms), length(classes),
+                       join(("[" * join(string.(st), "") * "]×$(o)" for (st, o) in sort(classes; by = first)), " ")))
+end
+md_table(["shape", "vertices", "edges", "order of Aut", "state classes", "classes × orbit size"], shape_rows)
+```
+
+The orbit size |orb(σ)| = |Aut(H)|/|Stab(σ)| is the number of labelled state assignments that
+the automorphisms of H identify with the canonical class σ. For the pair shape P₂ the classes and
+their orbit sizes are below. The pairwise model of NodeBasedModels counts ordered pairs for
+[SS] and [II] and each SI edge once for [SI], so [SS] = 2E_SS, [SI] = E_IS and [II] = 2E_II
+(the counting convention of `motif_based.jl`):
+
+```{julia}
+p2 = only(sh for sh in NodeBasedModels.enumerate_shapes(MotifClosure(3, 2)) if sh.name === :P2)
+NodeBasedModels.enumerate_state_classes(p2, [:S, :I])
+```
+
+No Lean statement is involved on this page.
+
+## References
+
+::: {#refs}
+:::

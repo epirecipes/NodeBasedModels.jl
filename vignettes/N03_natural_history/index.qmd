@@ -1,0 +1,389 @@
+---
+title: "Natural history in pairwise models"
+subtitle: "NodeBasedModels.jl vignette N03: latency, Erlang stages, branching with two infectors, two strains, vaccination and waning immunity, on Poisson(5), against NetworkOutbreaks and the edge-based model"
+---
+
+The pairwise lift is not specific to SIR. Every reaction of the model contributes its own terms: a contact
+X + J → Y + J with per-contact rate τ drains the pair [XJ] (and, through the closed triples [Z X J], every pair
+[ZX]); a node transition W → Z moves the singles [W] and every pair containing W. So latency, stages, branching,
+several infectors with their own rates, several strains, exits from S and even waning immunity are lifted the same
+way. This page lifts six models on the Poisson(5) configuration network, where the constant closure K = 1 is exact
+against the edge-based model for the five models inside T_EB [@kiss2017; @miller2012]. Each is written as a Catalyst
+reaction network and then built from the canned model with the factory, and each is compared with its committed
+NetworkOutbreaks ensemble. The EdgeBasedModels page E04 covers the same natural histories; the SEIR cell below is
+the same as E04's, apart from the lines marked `# back end`.
+
+```{julia}
+#| label: setup
+#| output: false
+include(joinpath(@__DIR__, "..", "_shared", "setup.jl"))
+require_summaries([:seir_pois5, :sir_erl3_pois5, :seair_pois5, :twostrain_pois5, :sir_vax_pois5, :sirs_pois5])
+using NetworkEpiCore, NetworkOutbreaks, Catalyst, Plots
+using EdgeBasedModels
+net = ConfigurationNetwork(PoissonDegree(5))
+# the deterministic curves of a system on the scenario's grid
+curves_of(sys, sc, label) = model_curves(sys, solve_epidemic(sys, sc); t = sc.tgrid, label)
+# one table row per curve: the total prevalence of the infectious compartments and the final size
+function compare_rows(sc, ref, dets)
+    tab = compare(ref, dets...)
+    [(string("`:", sc.id, "`"), d.label, tab[d.label, :infectious].D∞, tab[d.label, :infectious].SE∞,
+      tab[d.label, :infectious].z∞, tab[d.label, :cumulative].ΔR∞,
+      @sprintf("[%+.4f, %+.4f]", tab[d.label, :cumulative].ΔR∞_ci...)) for d in dets]
+end
+const ROW_HEADER = ["scenario", "model", "D∞(infectious)", "SE∞", "z∞", "ΔR∞", "95% CI of ΔR∞"]
+```
+
+## Latency: SEIR
+
+```{julia}
+#| label: shared-cell
+seir_rn = @reaction_network seir begin
+    @parameters τ σ γ
+    τ, S + I --> E + I
+    σ, E --> I
+    γ, I --> R
+end
+sc_seir   = scenario(:seir_pois5)
+m_seir    = contact_model(seir_rn)
+@assert isequivalent(m_seir, sc_seir.model)
+sys_seir  = node_based(m_seir, sc_seir.network)             # back end
+sys_seirF = generate_pairwise(seir_model(), sc_seir.network, BernoulliClosure(); cumulative = true)   # back end
+@assert vector_fields_equal(symbolic_ode(sys_seir), symbolic_ode(sys_seirF))
+p = sc_seir.params
+@printf("SEIR: T = %.4f (τ/(τ + γ) = %.4f), R₀ = %.4f, r = %.4f\n", transmissibility(m_seir, sc_seir.network, p),   # back end
+        p[:τ] / (p[:τ] + p[:γ]), basic_reproduction_number(m_seir, sc_seir.network, p), early_growth_rate(m_seir, sc_seir.network, p))   # back end
+```
+
+The low-level system (from the Catalyst network) and the factory system (`generate_pairwise(seir_model(), …)`) are
+the same vector field. The exposed class adds the singles [E] and the pairs [SE], [EE], [EI], [ER]; the contact
+S + I → E + I moves the newly infected end of [SI] into E, not I:
+
+```{julia}
+symbolic_ode(sys_seir)
+```
+
+The transmissibility T = τ/(τ + γ) is that of SIR, because a latent node cannot transmit and every exposed node
+becomes infectious; so R₀ = T·κ_ex is again 2, while the latency lowers the growth rate r (printed above) from the
+SIR value on the same network, r = `{julia} fmt(early_growth_rate(sir_model(), net, Dict(:τ => 1 / 6, :γ => 1 / 4)))`.
+
+```{julia}
+ref_seir = scenario_summary(sc_seir)
+anchors(sc_seir);
+describe_reference(ref_seir);
+det_seir = curves_of(sys_seir, sc_seir, "pairwise")
+eb_seir  = curves_of(edge_based(m_seir, sc_seir.network), sc_seir, "edge-based")
+nothing
+```
+
+```{julia}
+#| label: fig-seir
+#| fig-cap: "SEIR on Poisson(5): pairwise and edge-based models against the committed NetworkOutbreaks ensemble of :seir_pois5 (top: spread band q2.5–q97.5 of the runs and their mean; bottom: residual with the mean band ±1.96 SE)."
+#| fig-height: 5.5
+distinct_styles!(comparisonplot(ref_seir, det_seir, eb_seir; observables = [:E, :I, :cumulative]))
+```
+
+```{julia}
+#| output: asis
+md_table(ROW_HEADER, compare_rows(sc_seir, ref_seir, [det_seir, eb_seir]))
+```
+
+## Stages: an Erlang infectious period
+
+`erlang_stages(model, :I, n)` is a transform of the model object: it splits I into $I_1 \to I_2 \to \dots \to I_n$ with rate nγ
+per stage (the same mean infectious period 1/γ, a less variable duration), keeps every stage infectious at the
+same τ, and makes I₁ the entry state. The scenario `:sir_erl3_pois5` is the three-stage transform of SIR. The
+low-level route transforms the Catalyst model; the factory route transforms the canned SIR model:
+
+```{julia}
+sc_erl  = scenario(:sir_erl3_pois5)
+m_erl   = erlang_stages(contact_model(@reaction_network sir begin
+              @parameters τ γ
+              τ, S + I --> 2I
+              γ, I --> R
+          end), :I, 3)
+@assert isequivalent(m_erl, sc_erl.model)
+sys_erl  = node_based(m_erl, sc_erl.network)
+sys_erlF = generate_pairwise(erlang_stages(sir_model(), :I, 3), sc_erl.network, BernoulliClosure(); cumulative = true)
+@assert vector_fields_equal(symbolic_ode(sys_erl), symbolic_ode(sys_erlF))
+m_erl
+```
+
+A less variable infectious period gives each edge a larger chance to transmit before recovery: with exponential
+duration T = τ/(τ + γ), with n Erlang stages T = 1 − (nγ/(τ + nγ))ⁿ:
+
+```{julia}
+p_erl = sc_erl.params
+T_erl = transmissibility(m_erl, net, p_erl)
+@printf("T = %.4f (formula 1 − (3γ/(τ + 3γ))³ = %.4f; exponential: %.4f);  R₀ = %.4f;  r = %.4f\n",
+        T_erl, 1 - (3p_erl[:γ] / (p_erl[:τ] + 3p_erl[:γ]))^3, p_erl[:τ] / (p_erl[:τ] + p_erl[:γ]),
+        basic_reproduction_number(m_erl, net, p_erl), early_growth_rate(m_erl, net, p_erl))
+```
+
+```{julia}
+ref_erl = scenario_summary(sc_erl)
+anchors(sc_erl);
+describe_reference(ref_erl);
+det_erl = curves_of(sys_erl, sc_erl, "pairwise")
+eb_erl  = curves_of(edge_based(m_erl, sc_erl.network), sc_erl, "edge-based")
+nothing
+```
+
+```{julia}
+#| label: fig-erl
+#| fig-cap: "SIR with a three-stage Erlang infectious period (:sir_erl3_pois5): the total infectious prevalence I₁ + I₂ + I₃ and the cumulative incidence (bands as above)."
+#| fig-height: 5.5
+distinct_styles!(comparisonplot(ref_erl, det_erl, eb_erl; observables = [:infectious, :cumulative]))
+```
+
+```{julia}
+#| output: asis
+md_table(ROW_HEADER, compare_rows(sc_erl, ref_erl, [det_erl, eb_erl]))
+```
+
+## Branching and two infectors: SEAIR
+
+After latency a node becomes symptomatic (I, probability p) or asymptomatic (A, probability 1 − p), and the two
+infect at their own per-contact rates τ_I and τ_A. Each infector has its own contact, so each has its own pair
+[SI], [SA] and its own rate in the lifted equations:
+
+```{julia}
+sc_seair = scenario(:seair_pois5)
+seair_rn = @reaction_network seair begin
+    @parameters τI τA p σ γ
+    τI, S + I --> E + I
+    τA, S + A --> E + A
+    p*σ, E --> I
+    (1 - p)*σ, E --> A
+    γ, I --> R
+    γ, A --> R
+end
+m_seair = contact_model(seair_rn)
+@assert isequivalent(m_seair, sc_seair.model)
+sys_seair  = node_based(m_seair, sc_seair.network)
+sys_seairF = generate_pairwise(seair_model(), sc_seair.network, BernoulliClosure(); cumulative = true)
+@assert vector_fields_equal(symbolic_ode(sys_seair), symbolic_ode(sys_seairF))
+sode = symbolic_ode(sys_seair)
+println(length(state_names(sode)), " states: ", join(state_names(sode), ", "))
+```
+
+The node equations and the two infector pairs, from the symbolic form:
+
+```{julia}
+show_rows(sode, names) = for n in names
+    i = findfirst(==(n), state_names(sode)); println("d", n, "/dt = ", sode.rhs[i])
+end
+show_rows(sode, [:S, :E, :I, :A, :SI, :SA])
+```
+
+The transmissibility averages the two branches, T = p·τ_I/(τ_I + γ) + (1 − p)·τ_A/(τ_A + γ):
+
+```{julia}
+p_s = sc_seair.params
+@printf("T = %.4f (formula %.4f);  R₀ = %.4f;  r = %.4f\n", transmissibility(m_seair, net, p_s),
+        p_s[:p] * p_s[:τI] / (p_s[:τI] + p_s[:γ]) + (1 - p_s[:p]) * p_s[:τA] / (p_s[:τA] + p_s[:γ]),
+        basic_reproduction_number(m_seair, net, p_s), early_growth_rate(m_seair, net, p_s))
+```
+
+```{julia}
+ref_seair = scenario_summary(sc_seair)
+anchors(sc_seair);
+describe_reference(ref_seair);
+det_seair = curves_of(sys_seair, sc_seair, "pairwise")
+eb_seair  = curves_of(edge_based(m_seair, sc_seair.network), sc_seair, "edge-based")
+nothing
+```
+
+```{julia}
+#| label: fig-seair
+#| fig-cap: "SEAIR with branching after latency (:seair_pois5): symptomatic I, asymptomatic A and cumulative incidence (bands as above)."
+#| fig-height: 5.5
+distinct_styles!(comparisonplot(ref_seair, det_seair, eb_seair; observables = [:I, :A, :cumulative]))
+```
+
+```{julia}
+#| output: asis
+md_table(ROW_HEADER, compare_rows(sc_seair, ref_seair, [det_seair, eb_seair]))
+```
+
+## Two strains with full cross-immunity
+
+Two strains compete for the same susceptibles: an infection by either strain makes the node immune to both. The
+contacts have two entry states, I1 and I2, so there is no default seed and `node_based` asks for one:
+
+```{julia}
+sc_ts = scenario(:twostrain_pois5)
+ts_rn = @reaction_network twostrain begin
+    @parameters τ1 τ2 γ
+    τ1, S + I1 --> 2I1
+    τ2, S + I2 --> 2I2
+    γ, I1 --> R
+    γ, I2 --> R
+end
+m_ts = contact_model(ts_rn)
+@assert isequivalent(m_ts, sc_ts.model)
+println(try node_based(m_ts, net); "built" catch e; sprint(showerror, e) end)
+```
+
+With the scenario's seeds (0.5% in each strain):
+
+```{julia}
+sys_ts  = node_based(m_ts, sc_ts.network; initial = sc_ts.initial)
+sys_tsF = generate_pairwise(twostrain_model(), sc_ts.network, BernoulliClosure(); cumulative = true,
+                            initial = sc_ts.initial)
+@assert vector_fields_equal(symbolic_ode(sys_ts), symbolic_ode(sys_tsF))
+ref_ts = scenario_summary(sc_ts)
+anchors(sc_ts);
+describe_reference(ref_ts);
+det_ts = curves_of(sys_ts, sc_ts, "pairwise")
+eb_ts  = curves_of(edge_based(m_ts, sc_ts.network), sc_ts, "edge-based")
+nothing
+```
+
+```{julia}
+#| label: fig-ts
+#| fig-cap: "Two competing strains (:twostrain_pois5, τ₁ = 1/6, τ₂ = 1/5): the prevalence of each strain (bands as above)."
+#| fig-height: 5.5
+distinct_styles!(comparisonplot(ref_ts, det_ts, eb_ts; observables = [:I1, :I2, :cumulative]))
+```
+
+```{julia}
+#| output: asis
+md_table(ROW_HEADER, compare_rows(sc_ts, ref_ts, [det_ts, eb_ts]))
+```
+
+```{julia}
+tab_ts = compare(ref_ts, det_ts)
+@printf("peak I1: model %.4f; peak I2: model %.4f;  D∞(I1) = %.4f (z∞ = %.2f), D∞(I2) = %.4f (z∞ = %.2f)\n",
+        maximum(det_ts[:I1]), maximum(det_ts[:I2]), tab_ts["pairwise", :I1].D∞, tab_ts["pairwise", :I1].z∞,
+        tab_ts["pairwise", :I2].D∞, tab_ts["pairwise", :I2].z∞)
+```
+
+The faster strain (τ₂ = 1/5) reaches the larger peak, and the model follows each strain separately, not only their
+total.
+
+## An exit from S: vaccination
+
+Vaccination S → V at rate ν is an *exit*: it takes a susceptible node out of the epidemic without infecting it.
+It is in T_EB (the edge-based model carries the exit factor ξ), and in the pairwise model it simply moves [S] and
+every pair with an S end:
+
+```{julia}
+sc_vax = scenario(:sir_vax_pois5)
+vax_rn = @reaction_network sirv begin
+    @parameters τ γ ν
+    τ, S + I --> 2I
+    γ, I --> R
+    ν, S --> V
+end
+m_vax = contact_model(vax_rn)
+@assert isequivalent(m_vax, sc_vax.model)
+sys_vax  = node_based(m_vax, sc_vax.network)
+sys_vaxF = generate_pairwise(sirv_model(), sc_vax.network, BernoulliClosure(); cumulative = true)
+@assert vector_fields_equal(symbolic_ode(sys_vax), symbolic_ode(sys_vaxF))
+show_rows(symbolic_ode(sys_vax), [:S, :V, :SS, :SI, :SV])
+```
+
+Vaccinated nodes are not infections, so the cumulative incidence counts only the S → I contacts (typing rule
+§J.8), and at every time the fraction ever infected is 1 − S − V:
+
+```{julia}
+ref_vax = scenario_summary(sc_vax)
+anchors(sc_vax);
+describe_reference(ref_vax);
+det_vax = curves_of(sys_vax, sc_vax, "pairwise")
+eb_vax  = curves_of(edge_based(m_vax, sc_vax.network), sc_vax, "edge-based")
+@printf("max |cumulative − (1 − S − V)| = %.2e;  final V: model %.4f;  final size: model %.4f\n",
+        maximum(abs.(det_vax[:cumulative] .- (1 .- det_vax[:S] .- det_vax[:V]))), det_vax[:V][end],
+        det_vax[:cumulative][end])
+```
+
+```{julia}
+#| label: fig-vax
+#| fig-cap: "SIR with vaccination S → V at ν = 0.02 (:sir_vax_pois5): prevalence, vaccinated fraction and cumulative incidence (bands as above)."
+#| fig-height: 5.5
+distinct_styles!(comparisonplot(ref_vax, det_vax, eb_vax; observables = [:I, :V, :cumulative]))
+```
+
+```{julia}
+#| output: asis
+md_table(ROW_HEADER, compare_rows(sc_vax, ref_vax, [det_vax, eb_vax]))
+```
+
+## Waning immunity: SIRS, where the edge-based model stops
+
+With R → S at rate ε a recovered node becomes susceptible again. The reaction produces the susceptible species,
+so the model is outside T_EB: the edge-based model is not defined, and `edge_based` says why. The pairwise model is
+defined for every model of the network theory T_net, and it is an approximation here, not an exact limit:
+
+```{julia}
+sc_sirs = scenario(:sirs_pois5)
+sirs_rn = @reaction_network sirs begin
+    @parameters τ γ ε
+    τ, S + I --> 2I
+    γ, I --> R
+    ε, R --> S
+end
+m_sirs = contact_model(sirs_rn)
+@assert isequivalent(m_sirs, sc_sirs.model)
+sys_sirs  = node_based(m_sirs, sc_sirs.network)
+sys_sirsF = generate_pairwise(sirs_model(), sc_sirs.network, BernoulliClosure(); cumulative = true)
+@assert vector_fields_equal(symbolic_ode(sys_sirs), symbolic_ode(sys_sirsF))
+println(try edge_based(m_sirs, sc_sirs.network); "built" catch e; join(first(split(sprint(showerror, e), '\n'), 2), '\n') end)
+```
+
+The SIRS ensemble is conditioned on survival (prevalence at t_end > 0), and its time horizon is 300:
+
+```{julia}
+ref_sirs = scenario_summary(sc_sirs)
+anchors(sc_sirs);
+describe_reference(ref_sirs);
+det_sirs = curves_of(sys_sirs, sc_sirs, "pairwise")
+tab_sirs = compare(ref_sirs, det_sirs)
+```
+
+```{julia}
+#| label: fig-sirs
+#| fig-cap: "SIRS with waning immunity ε = 1/50 (:sirs_pois5): pairwise model against the survival-conditioned ensemble (bands as above)."
+#| fig-height: 5.5
+comparisonplot(ref_sirs, det_sirs; observables = [:I, :R])
+```
+
+With reinfection the cumulative incidence counts infection *events*, which exceed the number of nodes, while the
+ensemble's `final_size` is the fraction of nodes ever infected. The ΔR∞ column above compares these two different
+quantities, so for SIRS it is not a final-size error; the comparison of the curves themselves is:
+
+```{julia}
+rI = tab_sirs["pairwise", :I]; rc = tab_sirs["pairwise", :cumulative]
+@printf("cumulative infections per node at t = %g: model %.4f, ensemble mean %.4f (D∞ over the grid %.4f);  mean fraction ever infected (final_size) %.4f\n",
+        last(sc_sirs.tgrid), det_sirs[:cumulative][end], ref_sirs.cond[:cumulative].mean[end], rc.D∞,
+        mean(ref_sirs.final_size[ref_sirs.major]))
+@printf("prevalence: D∞ = %.4f at t = %.1f, z∞ = %.2f;  endemic I at t_end: model %.4f, ensemble %.4f\n",
+        rI.D∞, rI.t_D∞, rI.z∞, det_sirs[:I][end], ref_sirs.cond[:I].mean[end])
+```
+
+Unlike the five T_EB models above, the pairwise SIRS model misses the ensemble by more than the Monte Carlo error
+during the transient (z∞, the largest standardised gap max_t |x_det − x̄|/max(se, 10⁻⁴) over the grid, is well above 2 for the
+prevalence; the time printed above is that of the largest absolute gap D∞), although its endemic
+prevalence at t_end is close to the ensemble's. A likely cause, not tested on this page, is that the
+triple closure misses the correlations that reinfection builds up along edges. N09–N12 study the same question for SIS, and E13 shows it from the edge-based side.
+
+## Summary
+
+```{julia}
+#| output: asis
+rows = vcat(compare_rows(sc_seir, ref_seir, [det_seir, eb_seir]), compare_rows(sc_erl, ref_erl, [det_erl, eb_erl]),
+            compare_rows(sc_seair, ref_seair, [det_seair, eb_seair]), compare_rows(sc_ts, ref_ts, [det_ts, eb_ts]),
+            compare_rows(sc_vax, ref_vax, [det_vax, eb_vax]))
+md_table(ROW_HEADER, rows)
+pw_eb = maximum(maximum(abs.(a[X] .- b[X])) for (a, b) in ((det_seir, eb_seir), (det_erl, eb_erl),
+                (det_seair, eb_seair), (det_ts, eb_ts), (det_vax, eb_vax)) for X in (:infectious, :cumulative))
+@printf("max |pairwise − edge-based| over the five T_EB models (infectious, cumulative): %.1e\n", pw_eb)
+```
+
+On Poisson(5) the pairwise model and the edge-based model are the same curves for all five T_EB models, and both
+stay within a few standard errors of the ensembles.
+
+## References
+
+::: {#refs}
+:::
